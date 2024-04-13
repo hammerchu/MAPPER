@@ -1,0 +1,42 @@
+<ion-header [translucent]="true">
+  <ion-toolbar>
+    <ion-title>OBB Mapper - {{dataService.current_map}}
+    </ion-title>
+
+  </ion-toolbar>
+  <ion-toolbar>
+   <ion-item *ngIf="dataService.headerMode ==='setup'">
+      <ion-button fill="outline" color='dark' size="large" (click)="export()">Save Maps</ion-button>
+      <ion-button fill="outline" color='dark' size="large"  (click)="map_list.open()">Load Maps</ion-button>
+      <ion-item>
+        <ion-select class="map_list" #map_list aria-label="Choose Map" value=""
+        [(ngModel)]="dataService.current_map" (ionChange)="load_map()">
+          <ion-select-option *ngFor="let map of dataService.map_list; let i = index" >{{map}}</ion-select-option>
+        </ion-select>
+      </ion-item>
+      <!-- <ion-button fill="outline" color='dark' size="large"  (click)="f.click()">Load Maps</ion-button>
+      <input #f type="file" (change)="import($event)"> -->
+      <div style="margin: 50px;"></div>
+      <ion-button fill="outline" color='dark' size="large" >Show photos</ion-button>
+   </ion-item>
+   <ion-item *ngIf="dataService.headerMode ==='zone'">
+      <ion-button fill="outline" [color]='this.poly? "success":"dark"' size="large" (click)="active_cross_road()">cross road</ion-button>
+      <ion-button fill="outline" color='dark' size="large" >red zone</ion-button>
+      <div style="margin: 50px;"></div>
+      <ion-button slot="end" fill="outline" color='dark' size="large" ><ion-icon name="lock-open-outline"></ion-icon></ion-button>
+   </ion-item>
+   <ion-item *ngIf="dataService.headerMode ==='station'">
+     <ion-button fill="outline" color='dark' size="large" >Add Station</ion-button>
+     <div style="margin: 50px;"></div>
+   </ion-item>
+
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true">
+  <div id="canvasWrapper" style="position:relative;" >
+    <!-- <div style="position:absolute; right:100px;bottom: 100px;  border-radius: 50px; width: 300px; height:400px; background-color: rgba(255, 255, 255, 0.7); z-index: 99;"></div> -->
+    <canvas id="myCanvas" width="1200" height="1200"></canvas>
+
+  </div>
+</ion-content>
