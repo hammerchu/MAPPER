@@ -5,28 +5,39 @@
 
   </ion-toolbar>
   <ion-toolbar>
-   <ion-item *ngIf="dataService.headerMode ==='setup'">
-      <ion-button fill="outline" color='dark' size="large" (click)="export()">Save Maps</ion-button>
-      <ion-button fill="outline" color='dark' size="large"  (click)="map_list.open()">Load Maps</ion-button>
+
+   <ion-item ___SETUP___  *ngIf="dataService.headerMode ==='setup'">
+      <ion-button [disabled]="!this.dataService.current_map" fill="outline" color='dark' size="large" (click)="export()">Save Maps</ion-button>
+      <ion-button  fill="outline" color='dark' size="large"  (click)="map_list.open()">Load Maps</ion-button>
       <ion-item>
         <ion-select class="map_list" #map_list aria-label="Choose Map" value=""
         [(ngModel)]="dataService.current_map" (ionChange)="load_map()">
           <ion-select-option *ngFor="let map of dataService.map_list; let i = index" >{{map}}</ion-select-option>
         </ion-select>
       </ion-item>
-      <!-- <ion-button fill="outline" color='dark' size="large"  (click)="f.click()">Load Maps</ion-button>
-      <input #f type="file" (change)="import($event)"> -->
+
       <div style="margin: 50px;"></div>
-      <ion-button fill="outline" color='dark' size="large" >Show photos</ion-button>
+      <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["map_fix_white"]? "success":"dark"' size="large" (click)="toggleActiveMode('map_fix_white')">white</ion-button>
+      <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["map_fix_black"]? "success":"dark"' size="large" (click)="toggleActiveMode('map_fix_black')">black</ion-button>
    </ion-item>
-   <ion-item *ngIf="dataService.headerMode ==='zone'">
-      <ion-button fill="outline" [color]='this.poly? "success":"dark"' size="large" (click)="active_cross_road()">cross road</ion-button>
-      <ion-button fill="outline" color='dark' size="large" >red zone</ion-button>
+
+   <ion-item ___ZONE___ *ngIf="dataService.headerMode ==='zone'">
+      <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["zone_cross_road"]? "success":"dark"' size="large" (click)="toggleActiveMode('zone_cross_road')">cross road</ion-button>
+      <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["zone_red"]? "success":"dark"' size="large" (click)="toggleActiveMode('zone_red')">red zone</ion-button>
+
       <div style="margin: 50px;"></div>
-      <ion-button slot="end" fill="outline" color='dark' size="large" ><ion-icon name="lock-open-outline"></ion-icon></ion-button>
+      <!-- <ion-label>Activate angle {{grad_angle}}</ion-label> -->
+      <div style="width: 500px;">
+        <ion-range *ngIf="showDegEditor" aria-label="Range with ticks" [ticks]="true" [snaps]="true" [step]="10" [min]="0" [max]="360" (ionChange)="set_zone_deg()" [(ngModel)]="grad_angle">
+          <div slot="label" style="font-size: larger;">Activate angle {{grad_angle}}</div>
+        </ion-range>
+      </div>
+      <div style="margin: 50px;"></div>
+      <ion-button [disabled]="!this.dataService.current_map"  slot="end" fill="outline" color='dark' size="large" ><ion-icon name="lock-open-outline"></ion-icon></ion-button>
    </ion-item>
-   <ion-item *ngIf="dataService.headerMode ==='station'">
-     <ion-button fill="outline" color='dark' size="large" >Add Station</ion-button>
+
+   <ion-item ___STATION___ *ngIf="dataService.headerMode ==='station'">
+     <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["station_add"]? "success":"dark"'  size="large" (click)="toggleActiveMode('station_add')">Add Station</ion-button>
      <div style="margin: 50px;"></div>
    </ion-item>
 

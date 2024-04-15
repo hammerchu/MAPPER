@@ -14,12 +14,10 @@
         </ion-list>
 
         <ion-list id="labels-list">
-          <!-- <ion-list-header>Labels</ion-list-header>
-
-          <ion-item *ngFor="let label of labels" lines="none">
-            <ion-icon aria-hidden="true" slot="start" ios="bookmark-outline" md="bookmark-sharp"></ion-icon>
-            <ion-label>{{ label }}</ion-label>
-          </ion-item> -->
+          <ion-button (click)="list_obj('map')">map obj</ion-button>
+          <ion-button (click)="list_obj('zone')">Zone obj</ion-button>
+          <ion-button>Assit obj</ion-button>
+          <ion-button>Station obj</ion-button>
         </ion-list>
       </ion-content>
     </ion-menu>

@@ -14,6 +14,10 @@ const routes: Routes = [
   {
     path: 'canvas',
     loadChildren: () => import('./canvas/canvas.module').then( m => m.CanvasPageModule)
+  },
+  {
+    path: 'sandbox',
+    loadChildren: () => import('./sandbox/sandbox.module').then( m => m.SandboxPageModule)
   }
 ];
 

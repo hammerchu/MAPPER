@@ -1,0 +1,19 @@
+<ion-header [translucent]="true">
+  <ion-toolbar>
+    <ion-title>sandbox</ion-title>
+    <ion-item>
+      <!-- <ion-label>{{angle}}</ion-label> -->
+      <ion-input (ionChange)="ffy()"  [(ngModel)]="angle"></ion-input>
+    <!-- <ion-range style="width:200px;" aria-label="Range with ticks" [ticks]="false" [snaps]="true" [min]="0" [max]="360" (ionChange)="ffy()" [(ngModel)]="angle"></ion-range> -->
+    </ion-item>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true">
+  <div id="canvasWrapper" style="position:relative;" >
+    <!-- <div style="position:absolute; right:100px;bottom: 100px;  border-radius: 50px; width: 300px; height:400px; background-color: rgba(255, 255, 255, 0.7); z-index: 99;"></div> -->
+    <canvas id="myCanvas" width="1200" height="1200"></canvas>
+    <canvas id="c" width="200" height="200"></canvas>
+
+  </div>
+</ion-content>

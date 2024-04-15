@@ -16,4 +16,13 @@ export class AppComponent {
     this.dataService.headerMode = mode
   }
 
+  list_obj(type:string){
+    if (type === 'zone'){
+      console.log(this.dataService.zone_obj)
+    }
+    if (type === 'map'){
+      console.log(this.dataService.map_fix_obj)
+    }
+  }
+
 }
