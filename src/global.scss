@@ -30,3 +30,20 @@
   min-width: 150px!important;
   max-width: 150px!important;
 }
+
+.toast-normal-class{
+  font-size: larger ;
+  color: black;
+  --background: white;
+}
+// .toast-normal-class{
+//   font-size: larger ;
+//   color: black;
+//   --background: skyblue;
+// }
+
+.toast-alert-class{
+  font-size: larger ;
+  color: black;
+  --background: lightcoral;
+}

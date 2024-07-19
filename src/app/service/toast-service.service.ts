@@ -41,7 +41,15 @@ export class ToastService {
   // Simple toast with customer timer
   async simpleToast(message:string, timer:number) {
     const toast = await this.toastController.create({
-      cssClass: 'toast-custom-class',
+      cssClass: 'toast-normal-class',
+      message: message,
+      duration: timer
+    });
+    toast.present();
+  }
+  async simpleAlertToast(message:string, timer:number) {
+    const toast = await this.toastController.create({
+      cssClass: 'toast-alert-class',
       message: message,
       duration: timer
     });

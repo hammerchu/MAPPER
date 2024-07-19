@@ -8,16 +8,16 @@
 
           <ion-menu-toggle auto-hide="false" *ngFor="let item of dataService.headerModeList; let i = index">
             <ion-item >
-              <ion-label class="menu_item_label" (click)="set_header_mode(item)">{{ item }}</ion-label>
+              <ion-label [style.color]="dataService.headerMode===item? 'white':'grey' " class="menu_item_label" (click)="set_header_mode(item)">{{ item }}</ion-label>
             </ion-item>
           </ion-menu-toggle>
         </ion-list>
 
         <ion-list id="labels-list">
-          <ion-button (click)="list_obj('map')">map obj</ion-button>
+          <!-- <ion-button (click)="list_obj('map')">map obj</ion-button>
           <ion-button (click)="list_obj('zone')">Zone obj</ion-button>
           <ion-button>Assit obj</ion-button>
-          <ion-button>Station obj</ion-button>
+          <ion-button>Station obj</ion-button> -->
         </ion-list>
       </ion-content>
     </ion-menu>

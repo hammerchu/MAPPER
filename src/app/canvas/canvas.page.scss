@@ -1,5 +1,5 @@
 canvas {
-  border: 1px solid pink;
+  border: 2px solid grey;
   background-color: white;
 }
 
@@ -15,4 +15,9 @@ input {
 
 ion-button {
   text-transform: capitalize;
+}
+
+
+.title {
+  width:800px;
 }

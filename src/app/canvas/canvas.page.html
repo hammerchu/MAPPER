@@ -1,43 +1,74 @@
 <ion-header [translucent]="true">
   <ion-toolbar>
-    <ion-title>OBB Mapper - {{dataService.current_map}}
-    </ion-title>
-
+    <!-- <ion-item> -->
+    <ion-label slot="start" class="title"><h1>OBB Mapper</h1></ion-label>
+    <!-- <ion-title class="title">OBB Mapper </ion-title> -->
+    <ion-label slot="start" class="title"><h1 *ngIf="dataService.current_map">{{dataService.current_map}} <ion-chip>{{map_w}}:{{map_h}}</ion-chip></h1> </ion-label>
+    <!-- </ion-item> -->
   </ion-toolbar>
   <ion-toolbar>
 
    <ion-item ___SETUP___  *ngIf="dataService.headerMode ==='setup'">
-      <ion-button [disabled]="!this.dataService.current_map" fill="outline" color='dark' size="large" (click)="export()">Save Maps</ion-button>
-      <ion-button  fill="outline" color='dark' size="large"  (click)="map_list.open()">Load Maps</ion-button>
+      <ion-button [disabled]="!this.dataService.current_map" fill="outline" color='dark' size="large" (click)="save()">Save</ion-button>
+      <ion-button  fill="outline" color='dark' size="large"  (click)="new_map_list.open()">New</ion-button>
+      <ion-button  fill="outline" color='dark' size="large"  (click)="load_map_list.open()">Load</ion-button>
       <ion-item>
-        <ion-select class="map_list" #map_list aria-label="Choose Map" value=""
-        [(ngModel)]="dataService.current_map" (ionChange)="load_map()">
+        <ion-select class="map_list" #new_map_list aria-label="Choose Map" value=""
+        [(ngModel)]="dataService.current_map" (ionChange)="new_map();" >
           <ion-select-option *ngFor="let map of dataService.map_list; let i = index" >{{map}}</ion-select-option>
+        </ion-select>
+      </ion-item>
+      <ion-item>
+        <ion-select class="map_list" #load_map_list aria-label="Choose Map" value=""
+         (ionChange)="dataService.selectLoadMap($event)" (ionDismiss)="load_map_list_by_map_name.open();">
+          <ion-select-option *ngFor="let map of dataService.map_header_list; let i = index" [value]="map">{{map}}</ion-select-option>
+        </ion-select>
+
+        <ion-select class="map_list" #load_map_list_by_map_name aria-label="Choose Map" value=""
+         (ionChange)="load($event)">
+          <ion-select-option *ngFor="let file of dataService.save_map_list; let i = index" [value]="file">{{file.map_name}} - {{file.timestamp}}</ion-select-option>
         </ion-select>
       </ion-item>
 
       <div style="margin: 50px;"></div>
+      <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='is_show_markers? "success":"dark"' size="large" (click)="toggle_marker()">Show Markers</ion-button>
+      <!-- <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["map_fix_white"]? "success":"dark"' size="large" (click)="prox_map(1)">resize 1</ion-button> -->
       <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["map_fix_white"]? "success":"dark"' size="large" (click)="toggleActiveMode('map_fix_white')">white</ion-button>
       <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["map_fix_black"]? "success":"dark"' size="large" (click)="toggleActiveMode('map_fix_black')">black</ion-button>
+      <ion-button [disabled]="!this.dataService.current_map" fill="outline" color="dark" size="large" (click)="bring_to_front()">Bring to Front</ion-button>
+      <ion-button [disabled]="!this.dataService.current_map" fill="outline" color="dark" size="large" (click)="bring_forward()">Bring forward</ion-button>
+      <ion-button [disabled]="!this.dataService.current_map" fill="outline" color="dark" size="large" (click)="bring_backward()">Bring backward</ion-button>
+      <!-- <ion-button [disabled]="!this.dataService.current_map"  slot="end" fill="outline" color='dark' size="large" (click)="togglePolygonVisibility(0)"> Hide</ion-button> -->
+      <ion-button [disabled]="!this.dataService.current_map"  slot="end" fill="outline" color='dark' size="large" (click)="export_base_map()"> Export Base Map</ion-button>
    </ion-item>
 
    <ion-item ___ZONE___ *ngIf="dataService.headerMode ==='zone'">
       <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["zone_cross_road"]? "success":"dark"' size="large" (click)="toggleActiveMode('zone_cross_road')">cross road</ion-button>
+      <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["zone_slow"]? "success":"dark"' size="large" (click)="toggleActiveMode('zone_slow')">slow zone</ion-button>
+      <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["zone_pause"]? "success":"dark"' size="large" (click)="toggleActiveMode('zone_pause')">pause zone</ion-button>
       <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["zone_red"]? "success":"dark"' size="large" (click)="toggleActiveMode('zone_red')">red zone</ion-button>
 
       <div style="margin: 50px;"></div>
       <!-- <ion-label>Activate angle {{grad_angle}}</ion-label> -->
       <div style="width: 500px;">
-        <ion-range *ngIf="showDegEditor" aria-label="Range with ticks" [ticks]="true" [snaps]="true" [step]="10" [min]="0" [max]="360" (ionChange)="set_zone_deg()" [(ngModel)]="grad_angle">
+        <ion-range *ngIf="showDegEditor" aria-label="Range with ticks" [ticks]="true" [snaps]="true" [step]="15" [min]="0" [max]="360" (ionChange)="set_zone_deg()" [(ngModel)]="grad_angle">
           <div slot="label" style="font-size: larger;">Activate angle {{grad_angle}}</div>
         </ion-range>
       </div>
+      <div >
+        <ion-checkbox *ngIf="showDegEditor" [(ngModel)]="is_all_angle" (ionChange)="toggle_all_angle()">All angles</ion-checkbox>
+      </div>
+      <ion-button [disabled]="!this.dataService.current_map || this.isExporting"  slot="end" fill="outline" color='dark' size="large" (click)="process_and_export_control_map()"> Export Control Map</ion-button>
       <div style="margin: 50px;"></div>
-      <ion-button [disabled]="!this.dataService.current_map"  slot="end" fill="outline" color='dark' size="large" ><ion-icon name="lock-open-outline"></ion-icon></ion-button>
+      <!-- <ion-button [disabled]="!this.dataService.current_map"  slot="end" fill="outline" color='dark' size="large" ><ion-icon name="lock-open-outline"></ion-icon></ion-button> -->
    </ion-item>
 
    <ion-item ___STATION___ *ngIf="dataService.headerMode ==='station'">
      <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["station_add"]? "success":"dark"'  size="large" (click)="toggleActiveMode('station_add')">Add Station</ion-button>
+     <!-- <ion-button [disabled]="!this.dataService.is_saved"  slot="end" fill="outline" color='dark' size="large" (click)="save_station()"> Save Station</ion-button> -->
+     <ion-button [disabled]="!this.dataService.current_map || this.isExporting" slot="end" fill="outline" color='dark' size="large" (click)="save_station()"> Save Station</ion-button>
+     <!-- <ion-button  slot="end" fill="outline" color='dark' size="large" (click)="databaseService.downloadFirebase()"> Download JSON</ion-button> -->
+
      <div style="margin: 50px;"></div>
    </ion-item>
 
@@ -46,8 +77,30 @@
 
 <ion-content [fullscreen]="true">
   <div id="canvasWrapper" style="position:relative;" >
-    <!-- <div style="position:absolute; right:100px;bottom: 100px;  border-radius: 50px; width: 300px; height:400px; background-color: rgba(255, 255, 255, 0.7); z-index: 99;"></div> -->
-    <canvas id="myCanvas" width="1200" height="1200"></canvas>
 
+
+      <div __STATIONS_UI__ *ngIf="show_screen" style="border-radius:15px; position:absolute; width:200px; height: 300px;" [style.top.px]="screen_y" [style.left.px]="screen_x">
+        <ion-item>
+          <ion-title>Add Station</ion-title>
+        </ion-item>
+        <ion-item>
+          <ion-input #station_input [(ngModel)]="station_name" placeholder="station name" (keyup.enter)="close_floating_UI(false)" (keyup.esc)="show_screen=false"></ion-input>
+        </ion-item>
+        <ion-item>
+          <ion-button fill="outline"  color="dark" expand="block" (click)="close_floating_UI(false)">OK</ion-button>
+          <ion-button fill="outline"  color="dark" expand="block" (click)="show_screen=false">Cancel</ion-button>
+        </ion-item>
+        <ion-item>
+          <ion-select class="map_list" #new_map_list aria-label="Choose Map" value="" aria-placeholder="Choose Map"
+            [(ngModel)]="station_name" (ionChange)="close_floating_UI(true)">
+          <ion-select-option *ngFor="let map of dataService.map_header_list; let i = index" >{{map}}</ion-select-option>
+        </ion-select>
+        </ion-item>
+      </div>
+
+
+    <!-- <div style="position:absolute; right:100px;bottom: 100px;  border-radius: 50px; width: 300px; height:400px; background-color: rgba(255, 255, 255, 0.7); z-index: 99;"></div> -->
+    <canvas id="canvas_1" width="1200" height="600"></canvas>
+    <canvas id="canvas_2" width="1200" height="600"></canvas>
   </div>
 </ion-content>
