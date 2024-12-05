@@ -1,6 +1,10 @@
 import { Component, OnInit, HostListener, ViewChild } from '@angular/core';
 import { fabric } from 'fabric';
 import html2canvas from 'html2canvas';
+import * as download from 'downloadjs';
+import * as htmlToImage from 'html-to-image';
+import { toPng, toJpeg, toBlob, toPixelData, toSvg } from 'html-to-image';
+
 import {DataService} from '../service/data.service'
 import {DatabaseService} from '../service/database.service'
 import {ToastService} from  '../service/toast-service.service'
@@ -8,7 +12,7 @@ import { initializeApp } from "firebase/app";
 // import { Observable, map } from 'rxjs';
 // import { HttpClient } from '@angular/common/http';
 import { IonInput } from '@ionic/angular';
-import * as map_marker from '../../assets/maps/map_marker.json'
+// import * as map_marker from '../../assets/maps/map_marker.json'
 
 
 
@@ -81,13 +85,15 @@ export class CanvasPage implements OnInit {
 
   ngOnInit() {
 
-    // this.show_marker()
+    this.example_test_convex_polygon()
 
     var options = {
       backgroundColor: 'transparent',
       opacity: 0,
-      preserveObjectStacking: true
+      preserveObjectStacking: true,
+      renderOnAddRemove: false // prevent the canvas from rendering all objects when adding or removing objects
     }
+    // this.canvas = new fabric.StaticCanvas('canvas_1', options);
     this.canvas = new fabric.Canvas('canvas_1', options);
     this.canvas_control = new fabric.Canvas('canvas_2', options);
 
@@ -102,6 +108,11 @@ export class CanvasPage implements OnInit {
           this.lastPosX = evt.clientX;
           this.lastPosY = evt.clientY;
         }
+      }
+
+      if (this.is_measure_mode) {
+        this.addCrossMark(evt.clientX, evt.clientY)
+        console.log("evt.clientX, evt.clientY", evt.clientX, evt.clientY);
       }
     });
     this.canvas.on('mouse:move', (opt)=> {
@@ -215,7 +226,6 @@ export class CanvasPage implements OnInit {
       let polyObj = new fabric.Polygon(this.pts,
         {
           objectCaching:false,
-          // id:this.id++,
           fill: this.active_color,
           stroke: this.active_stroke_color,
           originX:'center',
@@ -233,7 +243,6 @@ export class CanvasPage implements OnInit {
 
       var type_id = 0
       for (const key of Object.keys(this.activeMode)) {
-        // console.log(' key : ', key, type_id);
         if ( (this.activeMode as any)[key]){
 
           if (key.startsWith('zone')){
@@ -248,7 +257,7 @@ export class CanvasPage implements OnInit {
           else if (key.startsWith('station')){
             this.dataService.station_obj.push(polyObj)
           }
-          polyObj.set('strokeWidth', type_id) //obseleted
+          // polyObj.set('strokeWidth', type_id) //obseleted
           this.add_custom_obj_type(key) // add a custom attribute object_type to the polygon obj
         }
         type_id++ //obseleted
@@ -503,7 +512,7 @@ export class CanvasPage implements OnInit {
           this.isExporting = false
         });
     },
-    1000);
+    3000);
   }
   export2DB(canvas_name:string, scale:number, file_name:string){
     setTimeout(() =>
@@ -536,9 +545,6 @@ export class CanvasPage implements OnInit {
 
   /* Save a new ver of the current map to DB */
   save(){
-    // // reset the zoom and pan
-    // this.canvas?.setZoom(this.start_zoom)
-    // this.canvas?.setViewportTransform(this.start_pan);
     if (this.dataService.current_map){
       setTimeout(() =>
       {
@@ -575,6 +581,9 @@ export class CanvasPage implements OnInit {
   }
 
   export_base_map(){
+    /*
+    Export the base map
+    */
     if (this.dataService.current_map){
 
       this.canvas_control?.loadFromJSON(JSON.stringify(this.canvas?.toJSON(["object_type", "name"])), function(){});
@@ -582,20 +591,17 @@ export class CanvasPage implements OnInit {
       this.canvas_control?.setHeight(this.map_h)
       setTimeout(() =>
       {
+        // hide the station and zone objects
         this.canvas_control?.getObjects().forEach( item  =>{
           console.log('check object_type', (item as any).object_type);
-
-          // if (item.strokeWidth === 4 || item.strokeWidth === 3 || item.strokeWidth === 2){
-          //   item.set('fill', 'transparent')
-          //   item.set('stroke', 'transparent')
-          // }
-          if ((item as any).object_type.includes('station')|| (item as any).object_type.includes('zone') ){
+          if(item.hasOwnProperty('object_type')){
+          if ( (item as any).object_type.includes('station')|| (item as any).object_type.includes('zone') ){
             item.set('fill', 'transparent')
             item.set('stroke', 'transparent')
           }
           else{
             item.set('stroke', 'transparent')
-          }
+          }}
         })
         this.canvas_control?.renderAll()
         // export the base map
@@ -611,14 +617,15 @@ export class CanvasPage implements OnInit {
       var station_list:any = []
 
       this.canvas?.getObjects().forEach( item  =>{
+        console.log("station item", item);
         // if (item.strokeWidth === 2 && item instanceof fabric.Circle){ // 4 => station
-        if ((item as any).object_type.includes('station') && item instanceof fabric.Circle){
+        if ( item.hasOwnProperty('object_type') && (item as any).object_type.includes('station') && item instanceof fabric.Circle){
 
           var connect_to_map = false;
-          if (item.radius === 12){
+          // check if the station is connected to the map(some station may not be connected to the map)
+          if (item.radius === 12){ // 12 is the radius of the station on the map
             connect_to_map = true;
           }
-
 
           station_list.push({
             station_name : item.name,
@@ -631,7 +638,63 @@ export class CanvasPage implements OnInit {
         'map_name' : this.dataService.current_map,
         'station_list' : station_list
       }
-      this.databaseService.updateMapData(data)
+      this.databaseService.updateMapData(data).then(()=>{
+        this.toastService.simpleToast('Station list export successfully', 2000)
+      })
+    }
+  }
+
+  save_virtual_obstacles(check_convex:boolean=false){
+    /*
+    Export the virtual obstacles
+    we only save the BLACK obstacles as list pf points, ideally they shall have less than 6 points
+    */
+    if (this.dataService.current_map){
+      var map_name = this.dataService.current_map
+      var obstacles_list:any = []
+    
+      this.canvas?.getObjects().forEach( item  =>{
+        if (item.hasOwnProperty('object_type') && (item as any).object_type.includes('map_fix_black') && item instanceof fabric.Polygon){
+        console.log('items', item.points);
+        if (check_convex){  // check if the polygon is convex before saving
+          if (this.dataService.check_convex_polygon(item.points as any[])){
+            obstacles_list.push(item.points)
+          }
+          else{
+            console.log('The polygon with id ', item.name, ' is not a convex polygon');
+            // Add a temporary red dot marker next to the non-convex polygon
+            const markerDot = new fabric.Circle({
+              radius: 8,
+              fill: 'red',
+              left: (item.left || 0) + 20,
+              top: (item.top || 0),
+              selectable: false,
+              evented: false
+            });
+            this.canvas?.add(markerDot);
+            
+            // Remove the marker after 20 seconds
+            setTimeout(() => {
+              this.canvas?.remove(markerDot);
+              this.canvas?.renderAll();
+            }, 30000);
+          }
+        }
+        else{
+          obstacles_list.push(item.points)
+        }
+        }
+      })
+
+      var data = {
+        'map_name' : this.dataService.current_map,
+        'obstacles_list' : obstacles_list
+      }
+      console.log('data', data);
+
+      this.databaseService.updateVirtualObstaclesData(data).then(()=>{
+        this.toastService.simpleToast('Virtual obstacles export successfully', 2000)
+      })
     }
   }
 
@@ -681,17 +744,85 @@ export class CanvasPage implements OnInit {
     zone_pause: "transparent",
     zone_cross_road: "transparent",
   }
-  editMode = false
+  is_lock_map_fix = false
   showDegEditor = false
 
-  unlock(){
-    // WIP - allow user to lock and unlock existing objects
-    if (this.editMode === true){
-      this.editMode = false;
+  /* Lock map fix items */
+  toggle_lock_map_fix(){
+    // allow user to lock and unlock existing map-fix objects
+    if (this.is_lock_map_fix === true){
+      this.is_lock_map_fix = false;
+      this.lock_map_fix_items(false)
     }
     else{
-      this.editMode = true;
+      this.is_lock_map_fix = true;
+      this.lock_map_fix_items(true)
     }
+  }
+  lock_map_fix_items(isLock:boolean){
+    console.log('object:', this.canvas?.getObjects())
+    var all_items = this.canvas?.getObjects()
+    if (isLock){
+      // this.canvas?.discardActiveObject();
+      if (all_items){
+        for (let index = 0; index < all_items.length; index++) {
+         if ((all_items[index] as any).object_type.includes('map_fix')){
+          console.log('This is a map fix', all_items[index]);
+          all_items[index].selectable = false; 
+         }
+        }
+      }
+    }
+    else{
+      if (all_items){
+        for (let index = 0; index < all_items.length; index++) {
+         if ((all_items[index] as any).object_type.includes('map_fix')){
+          console.log('This is a map fix', all_items[index]);
+          all_items[index].selectable = true; 
+         }
+        }
+      }
+    }
+    this.canvas?.requestRenderAll();
+  }
+
+  crossMarks: fabric.Group[] = [];
+  is_measure_mode = false;
+  pixel_distance: number = 0;
+  toggle_measure_mode(){
+    // allow user to measure the distance btw 2 pins
+    if (this.is_measure_mode === true){
+      this.is_measure_mode = false;
+    }
+    else{
+      this.is_measure_mode = true;
+      this.pixel_distance = 0
+    }
+  }
+  addCrossMark(x:any, y:any) {
+    // add two transparent crossmark to calculate the distance between 2 pin on the canvas
+    const crossMark = new fabric.Group([
+      new fabric.Line([x - 10, y, x + 10, y], { stroke: 'black', strokeWidth: 0 }),
+      new fabric.Line([x, y - 10, x, y + 10], { stroke: 'black', strokeWidth: 0 })
+    ], {
+      left: x,
+      top: y,
+      selectable: false
+    });
+
+    this.canvas?.add(crossMark);
+    this.crossMarks.push(crossMark);
+
+    if (this.crossMarks.length === 2) {
+      this.calculateDistance();
+      this.crossMarks = [] // reset the list
+    }
+  }
+  calculateDistance() {
+    const [firstMark, secondMark] = this.crossMarks;
+    const dx = firstMark.left! - secondMark.left!;
+    const dy = firstMark.top! - secondMark.top!;
+    this.pixel_distance = Math.sqrt(dx * dx + dy * dy) * 5 / 100 ; // 5 is the res of 5 cm per pixel, 100 is to show meter as unit
   }
 
   // turn on different editor mode
@@ -993,114 +1124,22 @@ export class CanvasPage implements OnInit {
     }
   }
 
+  example_test_convex_polygon(){
+    console.log('test convex polygon');
+
+    var polygon = [{'x':0, 'y':1}, {'x':1, 'y':-1}, {'x':5, 'y':5}, {'x':3, 'y':5}] // convex
+    console.log(this.dataService.check_convex_polygon(polygon));
+    var polygon = [{'x':0, 'y':0}, {'x':1, 'y':0}, {'x':2, 'y':2}, {'x':0, 'y':2}] // convex
+    console.log(this.dataService.check_convex_polygon(polygon));
+    var polygon = [{'x':0, 'y':0}, {'x':1, 'y':0}, {'x':2, 'y':2}, {'x':1, 'y':1}, {'x':0, 'y':2}] // concave
+    console.log(this.dataService.check_convex_polygon(polygon));
+    var polygon = [{'x':0, 'y':0}, {'x':4, 'y':0}, {'x':4, 'y':4}, {'x':2, 'y':2}, {'x':0, 'y':4}] // concave
+    console.log(this.dataService.check_convex_polygon(polygon));
+    var polygon = [{'x':0, 'y':0}, {'x':1, 'y':0}, {'x':2, 'y':2}, {'x':0, 'y':2}]
+    console.log(this.dataService.check_convex_polygon(polygon));
+  }
 
 
-  // show_marker(){
-  //   const dataArray = Object.values(map_marker);
-
-  //   for (let index = 0; index < dataArray.length; index++) {
-  //     if(dataArray[index]['timestamp']){
-  //       this.timestamp_list.push(dataArray[index]['timestamp']);
-  //       this.markers_list.push(dataArray[index]['markers']);
-  //     }
-  //   }
-  //   console.log('timestamp_list', this.timestamp_list);
-  //   console.log('markers_list', this.markers_list);
-
-  //   var resolution =  0.050000
-  //   var origin = [-116.405265, -409.977855, 0.000000]
-
-  //   var marker = new fabric.Circle({radius: 3, fill:"rgb(50, 200, 100, 0.7)", strokeWidth: 4, top:100, left: 100, lockScalingX: true, lockScalingY: true})
-
-
-  // }
-
-
-  // drawMarkersOnCanvas(mapImgPath: string, markerJsonPath: string, resolution: number, origin: [number, number, number]): void {
-  //   this.canvas?.clear();
-
-  //   // Load map image and get its size
-  //   this.getImageSize(mapImgPath).then((imgSize:any) => {
-  //     const gridWidth = imgSize.width;
-  //     const gridHeight = imgSize.height;
-
-  //     // Load marker JSON data
-  //     this.http.get(markerJsonPath).subscribe((markers: any[]) => {
-  //       markers.forEach((group) => {
-  //         group.markers.forEach((point, idx) => {
-  //           const pngPos = this.convertMapToPngPos(point, gridWidth, gridHeight, resolution, origin);
-  //           const radius = 1;
-
-  //           if (pngPos) {
-  //             const box = [pngPos[0] - radius, pngPos[1] - radius, pngPos[0] + radius, pngPos[1] + radius];
-  //             const circle = new fabric.Circle({
-  //               left: box[0],
-  //               top: box[1],
-  //               radius: radius,
-  //               fill: 'green',
-  //               selectable: false
-  //             });
-  //             this.canvas.add(circle);
-
-  //             if (idx < group.markers.length - 1) {
-  //               const nextPngPos = this.convertMapToPngPos(group.markers[idx + 1], gridWidth, gridHeight, resolution, origin);
-  //               if (nextPngPos) {
-  //                 const line = [pngPos[0], pngPos[1], nextPngPos[0], nextPngPos[1]];
-  //                 const lineObj = new fabric.Line(line, {
-  //                   fill: 'green',
-  //                   stroke: 'green',
-  //                   strokeWidth: 1,
-  //                   selectable: false
-  //                 });
-  //                 this.canvas.add(lineObj);
-  //               }
-  //             }
-  //           }
-  //         });
-  //       });
-
-  //       this.canvas.renderAll();
-  //     });
-  //   });
-  // }
-
-
-  // ROOT_PATH = "/Users/hammerchu/Desktop/DEV/OBB/bot"
-  // convertMapToPngPos(mapName: string, position: [number, number], gridWidth: number = 0, gridHeight: number = 0): Observable<[number, number]> {
-  //   try {
-  //     const yamlPath = `${this.ROOT_PATH}/data/maps/${mapName}/${mapName}.yaml`;
-  //     return this.http.get(yamlPath).pipe(
-  //       map((mapYaml: any) => {
-  //         if (gridWidth === 0 || gridHeight === 0) {
-  //           const mapImgPath = `${this.ROOT_PATH}/data/maps/${mapName}/${mapName}.png`;
-  //           const imgSize = this.getImageSize(mapImgPath);
-  //           gridWidth = imgSize.width;
-  //           gridHeight = imgSize.height;
-  //         }
-
-  //         const poseX = position[0];
-  //         const poseY = position[1];
-  //         const originX = mapYaml.origin[0];
-  //         const originY = mapYaml.origin[1];
-  //         const resolution = mapYaml.resolution;
-
-  //         const pngX = (poseX - originX) / resolution;
-  //         const pngY = gridHeight - (poseY - originY) / resolution;
-
-  //         return [Math.floor(pngX), Math.floor(pngY)];
-  //       })
-  //     );
-  //   } catch (error) {
-  //     console.error(error);
-  //     throw error;
-  //   }
-  // }
-
-  // private getImageSize(imagePath: string): { width: number, height: number } {
-  //   const image = new Image();
-  //   image.src = imagePath;
-  //   return { width: image.naturalWidth, height: image.naturalHeight };
-  // }
 
 
 

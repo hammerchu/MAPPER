@@ -40,6 +40,7 @@ export class DataService {
   constructor(
     private http: HttpClient
     ) {
+      // get all map names
       this.getSubfolderNames().subscribe((result)=>{
         this.map_header_list = result
         this.map_list = result
@@ -61,6 +62,30 @@ export class DataService {
         this.save_map_list.push(map)
       }
     })
+  }
+
+  check_convex_polygon(points:any[]){
+    // Check if a polygon is convex by verifying that all interior angles are less than 180 degrees
+    // Returns true if convex, false if concave
+    let n = points.length;
+    if (n < 3) return true; // A polygon must have at least 3 points
+
+    for (let i = 0; i < n; i++) {
+      let p1 = points[i];
+      let p2 = points[(i + 1) % n];
+      let p3 = points[(i + 2) % n];
+
+      // Calculate cross product to determine if points make a right or left turn
+      let crossProduct = (p2.x - p1.x) * (p3.y - p1.y) - (p2.y - p1.y) * (p3.x - p1.x);
+
+      // If cross product changes sign, the polygon is concave
+      if (i === 0) {
+        if (crossProduct < 0) return false;
+      } else {
+        if (crossProduct < 0) return false;
+      }
+    }
+    return true;
   }
 
 

@@ -135,7 +135,9 @@ export class DatabaseService {
 
 
   map_station_data_list:any[] = [] //storing map station data
-  /* Update map_data on DB */
+  /* 
+  Update map_data on DB - which will eventually be dowloaded to each BOT and used for navigation
+  */
   updateMapData(data:any, ){
     return new Promise(async (resolve, reject) => {
 
@@ -176,9 +178,77 @@ export class DatabaseService {
           resolve(true)
         });
       }
-
       })
+    })
+  }
+  
+  
+  map_virtual_obstacles_data_list:any[] = [] //storing map virtual obstacles data
+  /* 
+  Update map_data on DB - which will eventually be dowloaded to each BOT and used for navigation
+  */
+  updateVirtualObstaclesData(data:any, ){
+    return new Promise(async (resolve, reject) => {
 
+      var already_run = false // prevent the infiniti trigger loop
+
+      // download all the map data
+      var records = this.afStore.collection('virtual_obstacles_data',ref => ref).valueChanges()
+      .subscribe((record:any)=>{
+      console.log('A record[0].virtual_obstacles_data : ', record, record[0].virtual_obstacles_data );
+      this.map_virtual_obstacles_data_list = record[0].virtual_obstacles_data;
+
+      // add our new data into it
+      // if (!already_run && this.map_station_data_list.length < 5){
+      if (!already_run){
+        already_run = true
+
+        let index = this.map_virtual_obstacles_data_list.findIndex((item) => item.map_name === data.map_name);
+        // Check if the object with the specified property value exists in the array
+        if (index === -1) {
+          // If not found, push a new object with the desired properties
+          console.log("Adding new record");
+          this.map_virtual_obstacles_data_list.push(data);
+        } else {
+          // If found, log a message indicating that the object already exists
+          console.log("Replace existing record");
+          this.map_virtual_obstacles_data_list[index] = data
+        }
+
+        console.log(already_run, 'B this.map_virtual_obstacles_data_list : ', this.map_virtual_obstacles_data_list );
+        
+        // Convert nested arrays to objects with numeric keys
+        const processedData = this.map_virtual_obstacles_data_list.map(mapData => {
+          return {
+            ...mapData,
+            obstacles_list: mapData.obstacles_list.map((points: any[]) => {
+              // Check if points is an array before using reduce
+              if (!Array.isArray(points)) {
+                return points;
+              }
+              
+              // Convert array of points to object with numeric keys
+              const pointsObj: { [key: string]: any } = {};
+              points.forEach((point, index) => {
+                pointsObj[index.toString()] = point;
+              });
+              return pointsObj;
+            })
+          };
+        });
+
+        this.afStore.doc(`virtual_obstacles_data/all_maps`).set(
+          {
+            virtual_obstacles_data: processedData
+          },
+          {merge: true})
+        .catch(err => {
+          reject(err);
+        }).finally(()=>{
+          resolve(true)
+        });
+      }
+      })
     })
   }
 

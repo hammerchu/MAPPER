@@ -31,14 +31,17 @@
       </ion-item>
 
       <div style="margin: 50px;"></div>
-      <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='is_show_markers? "success":"dark"' size="large" (click)="toggle_marker()">Show Markers</ion-button>
-      <!-- <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["map_fix_white"]? "success":"dark"' size="large" (click)="prox_map(1)">resize 1</ion-button> -->
-      <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["map_fix_white"]? "success":"dark"' size="large" (click)="toggleActiveMode('map_fix_white')">white</ion-button>
-      <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["map_fix_black"]? "success":"dark"' size="large" (click)="toggleActiveMode('map_fix_black')">black</ion-button>
-      <ion-button [disabled]="!this.dataService.current_map" fill="outline" color="dark" size="large" (click)="bring_to_front()">Bring to Front</ion-button>
-      <ion-button [disabled]="!this.dataService.current_map" fill="outline" color="dark" size="large" (click)="bring_forward()">Bring forward</ion-button>
-      <ion-button [disabled]="!this.dataService.current_map" fill="outline" color="dark" size="large" (click)="bring_backward()">Bring backward</ion-button>
-      <!-- <ion-button [disabled]="!this.dataService.current_map"  slot="end" fill="outline" color='dark' size="large" (click)="togglePolygonVisibility(0)"> Hide</ion-button> -->
+      <!-- <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='is_show_markers? "success":"dark"' size="large" (click)="toggle_marker()">Show Markers</ion-button> -->
+      <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["map_fix_white"]? "success":"dark"' size="large" (click)="toggleActiveMode('map_fix_white')"><ion-icon name="ellipse-outline"></ion-icon></ion-button>
+      <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["map_fix_black"]? "success":"dark"' size="large" (click)="toggleActiveMode('map_fix_black')"><ion-icon name="ellipse"></ion-icon></ion-button>
+      <ion-button [disabled]="!this.dataService.current_map" fill="outline" color="dark" size="large" (click)="bring_to_front()"><ion-icon name="arrow-up-outline"></ion-icon></ion-button>
+      <ion-button [disabled]="!this.dataService.current_map" fill="outline" color="dark" size="large" (click)="bring_forward()"><ion-icon name="chevron-up-outline"></ion-icon></ion-button>
+      <ion-button [disabled]="!this.dataService.current_map" fill="outline" color="dark" size="large" (click)="bring_backward()"><ion-icon name="chevron-down-outline"></ion-icon></ion-button>
+      
+      <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]="is_measure_mode? 'success':'dark'" size="large" (click)="toggle_measure_mode()"><ion-icon name="pin-outline"></ion-icon>{{this.pixel_distance | number:'1.0-1'  }}</ion-button>
+      
+      <ion-button [disabled]="!this.dataService.current_map"  slot="end" fill="outline" [color]="is_lock_map_fix? 'success':'dark'" size="large" (click)="toggle_lock_map_fix()"> <ion-icon name="lock-closed-outline"></ion-icon></ion-button>
+      <ion-button [disabled]="!this.dataService.current_map"  slot="end" fill="outline" color='dark' size="large" (click)="save_virtual_obstacles(true)"> Save VO</ion-button>
       <ion-button [disabled]="!this.dataService.current_map"  slot="end" fill="outline" color='dark' size="large" (click)="export_base_map()"> Export Base Map</ion-button>
    </ion-item>
 
