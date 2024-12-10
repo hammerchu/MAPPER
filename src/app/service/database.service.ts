@@ -195,7 +195,6 @@ export class DatabaseService {
       // download all the map data
       var records = this.afStore.collection('virtual_obstacles_data',ref => ref).valueChanges()
       .subscribe((record:any)=>{
-      console.log('A record[0].virtual_obstacles_data : ', record, record[0].virtual_obstacles_data );
       this.map_virtual_obstacles_data_list = record[0].virtual_obstacles_data;
 
       // add our new data into it
@@ -213,30 +212,28 @@ export class DatabaseService {
           // If found, log a message indicating that the object already exists
           console.log("Replace existing record");
           this.map_virtual_obstacles_data_list[index] = data
-        }
-
-        console.log(already_run, 'B this.map_virtual_obstacles_data_list : ', this.map_virtual_obstacles_data_list );
-        
+        }        
         // Convert nested arrays to objects with numeric keys
         const processedData = this.map_virtual_obstacles_data_list.map(mapData => {
           return {
-            ...mapData,
+            ...mapData, // copy the mapData
             obstacles_list: mapData.obstacles_list.map((points: any[]) => {
               // Check if points is an array before using reduce
               if (!Array.isArray(points)) {
                 return points;
               }
-              
+
               // Convert array of points to object with numeric keys
               const pointsObj: { [key: string]: any } = {};
               points.forEach((point, index) => {
-                pointsObj[index.toString()] = point;
+
+                // pointsObj[index.toString()] = point;
+                pointsObj[index.toString()] = {x: point['x'], y: point['y']};
               });
               return pointsObj;
             })
           };
         });
-
         this.afStore.doc(`virtual_obstacles_data/all_maps`).set(
           {
             virtual_obstacles_data: processedData
