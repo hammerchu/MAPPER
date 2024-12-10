@@ -160,6 +160,7 @@ export class CanvasPage implements OnInit {
 
           var mCanvas:any = this.canvas?.viewportTransform; // obtain the canvas transformation matrix after zoom
           this.mInverse = fabric.util.invertTransform(mCanvas); // and then update the reverse
+          this.canvas.requestRenderAll();
         }
       }
     });
@@ -293,6 +294,13 @@ export class CanvasPage implements OnInit {
       {
         var new_mouse_pos = ({x: evt.clientX - 150 , y: evt.clientY - 160} as fabric.Point);
       }
+      // if (this.mInverse){
+      //   var new_mouse_pos = fabric.util.transformPoint(({x: evt.clientX - 150, y: evt.clientY - 160 } as fabric.Point), this.mInverse); // 150 and 160 pixel are adjustment observe by eyes
+      // }
+      // else
+      // {
+      //   var new_mouse_pos = ({x: evt.clientX - 150 , y: evt.clientY - 160} as fabric.Point);
+      // }
       if (this.station_mode == true) {
         console.log('Put station at ', new_mouse_pos);
 
@@ -469,8 +477,11 @@ export class CanvasPage implements OnInit {
   start_pan:any;
   map_w = 0
   map_h = 0
-
+  scale_factor = 1;
+  target_width = 1920;
   use_prox = false;
+  originalImage?: fabric.Image;
+  scaledImage?: fabric.Image;
   /* Create a new map project */
   new_map(){
       this.canvas?.clear()
@@ -481,21 +492,52 @@ export class CanvasPage implements OnInit {
       fabric.Image.fromURL(full_map_path, img => {
         // console.log('w & h: ', img.width, img.height );
         if (this.canvas && img.width && img.height){
+          // img.scaleToWidth(img.width/2);
+          // this.map_w = img.width/4
+          // this.map_h = img.height/4
+          this.scale_factor = this.target_width/img.width
           this.map_w = img.width
           this.map_h = img.height
-          this.canvas?.setWidth(this.map_w)
-          this.canvas?.setHeight(this.map_h)
+          this.canvas?.setWidth(this.target_width)
+          this.canvas?.setHeight(img.height*this.scale_factor)
+          // this.map_w = img.width/4
+          // this.map_h = img.height/4
+          // this.canvas?.setWidth(this.map_w)
+          // this.canvas?.setHeight(this.map_h)
+
           this.start_zoom = this.canvas?.getZoom();
           this.current_zoom = this.canvas.getZoom();
           this.start_pan = this.canvas?.viewportTransform;
           this.current_pan = this.canvas?.viewportTransform;
-          img.set({ selectable: false });
+          // img.set({ selectable: false });
           this.canvas?.setBackgroundImage(img, this.canvas.renderAll.bind(this.canvas));
+    
           // initize the mInverse for mouse position calculation of poly draw mouse event
           var mCanvas:any = this.canvas?.viewportTransform;
           this.mInverse = fabric.util.invertTransform(mCanvas);
         }
       });
+
+  }
+
+  /* Toggle the scaled image */
+  use_scaled_image = false;
+  toggle_scaled_image(){
+    if (this.scaledImage && this.originalImage){
+      if (this.use_scaled_image){
+        this.use_scaled_image = false;
+        console.log('use original image');
+        this.toastService.simpleToast('Use original image', 2000)
+        this.canvas?.setBackgroundImage(this.originalImage , this.canvas.renderAll.bind(this.canvas));
+      }
+      else{
+        this.use_scaled_image = true;
+        console.log('use scaled image');
+        this.toastService.simpleToast(`Use scaled image, w: ${this.scaledImage?.width}, h: ${this.scaledImage?.height}`, 2000)
+        this.canvas?.setBackgroundImage(this.scaledImage, this.canvas.renderAll.bind(this.canvas));
+      }
+    }
+    
 
   }
 
@@ -587,8 +629,10 @@ export class CanvasPage implements OnInit {
     if (this.dataService.current_map){
 
       this.canvas_control?.loadFromJSON(JSON.stringify(this.canvas?.toJSON(["object_type", "name"])), function(){});
-      this.canvas_control?.setWidth(this.map_w)
-      this.canvas_control?.setHeight(this.map_h)
+      this.canvas_control?.setWidth(this.map_w) //TODO
+      this.canvas_control?.setHeight(this.map_h) //TODO
+      // this.canvas_control?.setWidth(this.map_w*4) //TODO
+      // this.canvas_control?.setHeight(this.map_h*4) //TODO
       setTimeout(() =>
       {
         // hide the station and zone objects
@@ -606,7 +650,7 @@ export class CanvasPage implements OnInit {
         this.canvas_control?.renderAll()
         // export the base map
         this.export('canvas_2', 1, `${this.dataService.current_map}_base_map`)
-
+      
       }, 500)
     }
   }
@@ -644,7 +688,7 @@ export class CanvasPage implements OnInit {
     }
   }
 
-  save_virtual_obstacles(check_convex:boolean=false){
+  save_virtual_obstacles(is_check_convex:boolean=false){
     /*
     Export the virtual obstacles
     we only save the BLACK obstacles as list pf points, ideally they shall have less than 6 points
@@ -652,19 +696,37 @@ export class CanvasPage implements OnInit {
     if (this.dataService.current_map){
       var map_name = this.dataService.current_map
       var obstacles_list:any = []
+      var matrix_list:any = []
     
       this.canvas?.getObjects().forEach( item  =>{
         if (item.hasOwnProperty('object_type') && (item as any).object_type.includes('map_fix_black') && item instanceof fabric.Polygon){
         console.log('items', item.points);
-        if (check_convex){  // check if the polygon is convex before saving
+        if (is_check_convex){  // check if the polygon is convex before saving
           if (this.dataService.check_convex_polygon(item.points as any[])){
-            obstacles_list.push(item.points)
+
+            // transform the points (cover if user transformed the poly with fabric js UI)
+            var matrix = item.calcTransformMatrix()
+            var translatedPoints = item.points?.map(function(p) {
+                return {
+                    x: p.x - item.pathOffset.x,
+                    y: p.y - item.pathOffset.y
+                };
+            });
+            if (translatedPoints){
+            for (var i = 0; i < translatedPoints.length; i++) {
+                translatedPoints[i].x = matrix[0] * translatedPoints[i].x + matrix[2] * translatedPoints[i].y + matrix[4];
+                translatedPoints[i].y = matrix[1] * translatedPoints[i].x + matrix[3] * translatedPoints[i].y + matrix[5];
+            }
+
+            obstacles_list.push(translatedPoints)
+            // obstacles_list.push(item.points)
+          }
           }
           else{
             console.log('The polygon with id ', item.name, ' is not a convex polygon');
             // Add a temporary red dot marker next to the non-convex polygon
             const markerDot = new fabric.Circle({
-              radius: 8,
+              radius: 12,
               fill: 'red',
               left: (item.left || 0) + 20,
               top: (item.top || 0),
@@ -672,27 +734,43 @@ export class CanvasPage implements OnInit {
               evented: false
             });
             this.canvas?.add(markerDot);
+            this.canvas?.requestRenderAll();
             
             // Remove the marker after 20 seconds
             setTimeout(() => {
               this.canvas?.remove(markerDot);
-              this.canvas?.renderAll();
+              this.canvas?.requestRenderAll();
             }, 30000);
           }
         }
         else{
-          obstacles_list.push(item.points)
-        }
+          var matrix = item.calcTransformMatrix()
+          var translatedPoints = item.points?.map(function(p) {
+              return {
+                  x: p.x - item.pathOffset.x,
+                  y: p.y - item.pathOffset.y
+              };
+          });
+          if (translatedPoints){
+          for (var i = 0; i < translatedPoints.length; i++) {
+              translatedPoints[i].x = matrix[0] * translatedPoints[i].x + matrix[2] * translatedPoints[i].y + matrix[4];
+              translatedPoints[i].y = matrix[1] * translatedPoints[i].x + matrix[3] * translatedPoints[i].y + matrix[5];
+          }
+
+          // obstacles_list.push(item.points)
+          obstacles_list.push(translatedPoints)
+          }}
         }
       })
 
       var data = {
         'map_name' : this.dataService.current_map,
-        'obstacles_list' : obstacles_list
+        'obstacles_list' : obstacles_list,
+        // 'matrix_list' : matrix_list
       }
-      console.log('data', data);
 
       this.databaseService.updateVirtualObstaclesData(data).then(()=>{
+
         this.toastService.simpleToast('Virtual obstacles export successfully', 2000)
       })
     }
@@ -1125,18 +1203,106 @@ export class CanvasPage implements OnInit {
   }
 
   example_test_convex_polygon(){
+    // test convex polygon
     console.log('test convex polygon');
 
-    var polygon = [{'x':0, 'y':1}, {'x':1, 'y':-1}, {'x':5, 'y':5}, {'x':3, 'y':5}] // convex
-    console.log(this.dataService.check_convex_polygon(polygon));
-    var polygon = [{'x':0, 'y':0}, {'x':1, 'y':0}, {'x':2, 'y':2}, {'x':0, 'y':2}] // convex
-    console.log(this.dataService.check_convex_polygon(polygon));
-    var polygon = [{'x':0, 'y':0}, {'x':1, 'y':0}, {'x':2, 'y':2}, {'x':1, 'y':1}, {'x':0, 'y':2}] // concave
-    console.log(this.dataService.check_convex_polygon(polygon));
-    var polygon = [{'x':0, 'y':0}, {'x':4, 'y':0}, {'x':4, 'y':4}, {'x':2, 'y':2}, {'x':0, 'y':4}] // concave
-    console.log(this.dataService.check_convex_polygon(polygon));
-    var polygon = [{'x':0, 'y':0}, {'x':1, 'y':0}, {'x':2, 'y':2}, {'x':0, 'y':2}]
-    console.log(this.dataService.check_convex_polygon(polygon));
+    // var polygon = [{'x':0, 'y':1}, {'x':1, 'y':-1}, {'x':5, 'y':5}, {'x':3, 'y':5}] // convex
+    // console.log(this.dataService.check_convex_polygon(polygon));
+    // var polygon = [{'x':0, 'y':0}, {'x':1, 'y':0}, {'x':2, 'y':2}, {'x':0, 'y':2}] // convex
+    // console.log(this.dataService.check_convex_polygon(polygon));
+    // var polygon = [{'x':0, 'y':0}, {'x':1, 'y':0}, {'x':2, 'y':2}, {'x':1, 'y':1}, {'x':0, 'y':2}] // concave
+    // console.log(this.dataService.check_convex_polygon(polygon));
+    // var polygon = [{'x':0, 'y':0}, {'x':4, 'y':0}, {'x':4, 'y':4}, {'x':2, 'y':2}, {'x':0, 'y':4}] // concave
+    // console.log(this.dataService.check_convex_polygon(polygon));
+    // var polygon = [{'x':0, 'y':0}, {'x':1, 'y':0}, {'x':2, 'y':2}, {'x':0, 'y':2}]
+    // console.log(this.dataService.check_convex_polygon(polygon));
+
+    var test_points_ccw = [
+      {
+        x: 8047.473527889496,
+        y: 4849.431887593557
+      },
+      {
+        x: 8117.404403730849,
+        y: 4758.612568319072
+      },
+      {
+        x: 8101.056926261442,
+        y: 4744.081477235155
+      },
+      {
+        x: 8035.667016383813,
+        y: 4839.441
+      }
+    ]
+    var test_points_ccw_concave = [
+      {
+        x: 8047.473527889496,
+        y: 4849.431887593557
+      },
+      {
+        x: 8117.404403730849,
+        y: 4758.612568319072
+      },
+      {
+        x: 8217.404403730849,
+        y: 4758.612568319072
+      },
+      {
+        x: 8101.056926261442,
+        y: 4744.081477235155
+      },
+      {
+        x: 8035.667016383813,
+        y: 4839.441
+      }
+    ]
+    var test_points_cw = [
+      {
+        x: 8035.667016383813,
+        y: 4839.441
+      },
+      {
+        x: 8101.056926261442,
+        y: 4744.081477235155
+      },
+      {
+        x: 8117.404403730849,
+        y: 4758.612568319072
+      },
+      {
+        x: 8047.473527889496,
+        y: 4849.431887593557
+      }
+    ]
+    var test_points_concave_cw = [
+      {
+        x: 8035.667016383813,
+        y: 4839.441
+      },
+      {
+        x: 8101.056926261442,
+        y: 4744.081477235155
+      },
+      {
+        x: 8217.404403730849,
+        y: 4758.612568319072
+      },
+      {
+        x: 8117.404403730849,
+        y: 4758.612568319072
+      },
+      {
+        x: 8047.473527889496,
+        y: 4849.431887593557
+      }
+    ]
+    console.log('result ccw: ', this.dataService.check_convex_polygon(test_points_ccw));
+    console.log('result cw: ', this.dataService.check_convex_polygon(test_points_cw));
+    console.log('result ccw concave: ', this.dataService.check_convex_polygon(test_points_ccw_concave));
+    console.log('result cw concave: ', this.dataService.check_convex_polygon(test_points_concave_cw));
+
+
   }
 
 
