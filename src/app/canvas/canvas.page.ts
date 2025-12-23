@@ -224,6 +224,7 @@ export class CanvasPage implements OnInit {
            this.canvas?.remove(obj);
           }
       });
+      this.canvas?.renderAll();
       let polyObj = new fabric.Polygon(this.pts,
         {
           objectCaching:false,
@@ -304,8 +305,117 @@ export class CanvasPage implements OnInit {
       if (this.station_mode == true) {
         console.log('Put station at ', new_mouse_pos);
 
+        // 根据当前激活的模式确定站点类型
+        var station_type = 'station_add'; // 默认类型
+        for (const key of Object.keys(this.activeMode)) {
+          if (key.startsWith('station') && (this.activeMode as any)[key]) {
+            station_type = key;
+            break;
+          }
+        }
+        this.current_station_type = station_type;
+
+        // 根据站点类型设置不同颜色
+        var station:any;
+        if (station_type === 'station_add') {
+          var fill_color = "rgb(100, 200, 255, 0.7)"; // 默认蓝色
+          station = new fabric.Circle({radius: 10, fill: fill_color, strokeWidth: 2, top:new_mouse_pos.y - 15, left: new_mouse_pos.x - 15, lockScalingX: true, lockScalingY: true}) // adjust was added by trial and error
+        }
+        else if (station_type === 'station_unload') {
+          fill_color = "rgb(255, 165, 0, 0.7)"; // 橙色
+          // Create two circles and a thin vertical line
+          var cir1_radius = 10; // size of the circle1
+          var circle1 = new fabric.Circle({
+            name: 'pre-pose',
+            radius: cir1_radius,
+            fill: fill_color,
+            strokeWidth: 2,
+            top: new_mouse_pos.y,
+            left: new_mouse_pos.x,
+            lockScalingX: true,
+            lockScalingY: true
+          });
+          var cir2_radius = 10; // size of the circle2
+          var cir2_offset_y = 30; // offset of the circle2
+          var circle2 = new fabric.Circle({
+            name: 'target-pose',
+            radius: cir2_radius,
+            fill: "rgb(255, 255, 255, 0.8)",
+            stroke: "rgb(100, 60, 0, 0.7)",
+            strokeWidth: 1,
+            top: new_mouse_pos.y + cir2_offset_y, //
+            left: new_mouse_pos.x,
+            lockScalingX: true,
+            lockScalingY: true
+          });
+
+          console.log('circle1.left: ', circle1.left, 'circle1.top: ', circle1.top);
+          console.log('circle2.left: ', circle2.left, 'circle2.top: ', circle2.top);
+
+          // Start and end at the center of each circle, calculated by radius, top, and left
+          var line = new fabric.Line([
+            circle1.left!+cir1_radius, circle1.top!+cir1_radius, // Center of the lower circle
+            circle2.left!+cir2_radius, circle2.top!+cir2_radius  // Center of the upper circle
+          ], {
+            stroke: "rgba(100, 60, 0, 0.7)",
+            strokeWidth: 2,
+            selectable: false
+          });
+
+          station = new fabric.Group([circle1, circle2, line], {
+            lockScalingX: true,
+            lockScalingY: true
+          });
+          console.log('station.left: ', station.left, 'station.top: ', station.top);
+        } else if (station_type === 'station_charging') {
+          fill_color = "rgb(0, 255, 0, 0.7)"; // 绿色
+          // Transform charging station to have the same structure as loading (unload) station: two circles (pre and target), connected by a line
+          var cir1_radius = 10; // size of the circle1
+          var circle1 = new fabric.Circle({
+            name: 'pre-pose',
+            radius: cir1_radius,
+            fill: fill_color,
+            strokeWidth: 2,
+            top: new_mouse_pos.y,
+            left: new_mouse_pos.x,
+            lockScalingX: true,
+            lockScalingY: true
+          });
+          var cir2_radius = 10; // size of the circle2
+          var cir2_offset_y = 30; // offset of the circle2
+          var circle2 = new fabric.Circle({
+            name: 'target-pose',
+            radius: cir2_radius,
+            fill: "rgb(255,255,255,0.8)",
+            stroke: "rgba(0, 100, 0, 0.7)",
+            strokeWidth: 1,
+            top: new_mouse_pos.y + cir2_offset_y,
+            left: new_mouse_pos.x,
+            lockScalingX: true,
+            lockScalingY: true
+          });
+
+          // Start and end at the center of each circle
+          var line = new fabric.Line([
+            circle1.left! + cir1_radius, circle1.top! + cir1_radius,
+            circle2.left! + cir2_radius, circle2.top! + cir2_radius
+          ], {
+            stroke: "rgba(0, 100, 0, 0.7)",
+            strokeWidth: 2,
+            selectable: false
+          });
+
+          station = new fabric.Group([circle1, circle2, line], {
+            lockScalingX: true,
+            lockScalingY: true
+          });
+          // station = new fabric.Circle({radius: 30, fill: fill_color, strokeWidth: 2, top:new_mouse_pos.y - 15, left: new_mouse_pos.x - 15, lockScalingX: true, lockScalingY: true}) // adjust was added by trial and error
+        } else if (station_type === 'station_lift') {
+          fill_color = "rgb(255, 0, 255, 0.7)"; // 紫色
+          station = new fabric.Circle({radius: 40, fill: fill_color, strokeWidth: 2, top:new_mouse_pos.y - 15, left: new_mouse_pos.x - 15, lockScalingX: true, lockScalingY: true}) // adjust was added by trial and error
+        }
+
         // Hardcoded strokeWidth as 2
-        var station = new fabric.Circle({radius: 10, fill:"rgb(100, 200, 255, 0.7)", strokeWidth: 2, top:new_mouse_pos.y - 15, left: new_mouse_pos.x - 15, lockScalingX: true, lockScalingY: true}) // adjust was added by trial and error
         var station_text = new fabric.IText('', { fill:"rgb(0, 0, 0, 0.7)", strokeWidth: 2, top:new_mouse_pos.y + 10, left: new_mouse_pos.x + 10, fontFamily: 'Arial', fontSize: 25})
         this.launch_floating_UI(evt.clientX, evt.clientY, station, station_text)
       }
@@ -318,6 +428,7 @@ export class CanvasPage implements OnInit {
   station_holder:any;
   station_text_holder:any;
   connect_to_map = false;
+  current_station_type = "station_add"; // 追踪当前选择的站点类型
 
   @ViewChild('station_input') station_input!: IonInput;
 
@@ -325,28 +436,34 @@ export class CanvasPage implements OnInit {
     this.screen_x = x
     this.screen_y = y
     this.show_screen = true
-    this.station_holder = station_obj
-    this.station_text_holder = text_obj
+    this.station_holder = station_obj // station_obj means the circle object
+    this.station_text_holder = text_obj // text_obj means the text object
 
     setTimeout(() =>
     { this.station_input.setFocus(); // trigger setfocus on the input field
     },500)
   }
+  /**
+   * 关闭浮动UI并保存站点信息
+   * @param is_connect_to_map 是否连接到地图
+   */
   close_floating_UI(is_connect_to_map:boolean){
     this.show_screen = false
     this.station_text_holder.set('text', this.station_name)
 
-    // the custom attribute "name" needs to be added manually, otherwise it would not be saved into json
+    // the custom attribute "name" and "station_type" need to be added manually, otherwise they would not be saved into json
     this.station_holder.toObject = (function (toObject) {
       return function (this: fabric.Object) {
         return fabric.util.object.extend(toObject.call(this), {
           name: this.name,
-          object_type: 'station'
+          object_type: 'station',
+          station_type: (this as any).station_type // 保存站点类型，类型断言以避免TS属性错误
         });
       };
     })(this.station_holder.toObject);
     this.station_holder.name = this.station_name // set custom attribute name
     this.station_holder.object_type = 'station' // set custom attribute object_type
+    this.station_holder.station_type = this.current_station_type // 设置站点类型
 
     // add the same custom object_type to the station label text
     this.station_text_holder.toObject = (function (toObject) {
@@ -362,7 +479,16 @@ export class CanvasPage implements OnInit {
 
     if (is_connect_to_map){
       this.station_holder.set('radius', 12)
-      this.station_holder.set('fill', 'rgb(100, 100, 255, 0.7)')
+      // 根据站点类型设置连接到地图时的颜色
+      var connected_color = 'rgb(100, 100, 255, 0.7)'; // 默认深蓝色
+      if (this.current_station_type === 'station_unload') {
+        connected_color = 'rgb(200, 100, 0, 0.7)'; // 深橙色
+      } else if (this.current_station_type === 'station_charging') {
+        connected_color = 'rgb(0, 200, 0, 0.7)'; // 深绿色
+      } else if (this.current_station_type === 'station_lift') {
+        connected_color = 'rgb(200, 0, 200, 0.7)'; // 深紫色
+      }
+      this.station_holder.set('fill', connected_color)
     }
     this.canvas?.add(this.station_holder)
     this.canvas?.add(this.station_text_holder)
@@ -386,6 +512,7 @@ export class CanvasPage implements OnInit {
         // console.log(' this.canvas.getActiveObject() : ', this.canvas.getActiveObject() );
         if (this.canvas.getActiveObject() !== null){
           this.canvas?.remove(this.canvas.getActiveObject()!)
+          this.canvas?.renderAll();
         }
       }
     }
@@ -655,27 +782,133 @@ export class CanvasPage implements OnInit {
     }
   }
 
+  /**
+   * 保存站点信息到数据库
+   */
   save_station(){
     if (this.dataService.current_map){
       var map_name = this.dataService.current_map
       var station_list:any = []
 
       this.canvas?.getObjects().forEach( item  =>{
-        console.log("station item", item);
+        console.log("======== station item ========", item);
         // if (item.strokeWidth === 2 && item instanceof fabric.Circle){ // 4 => station
-        if ( item.hasOwnProperty('object_type') && (item as any).object_type.includes('station') && item instanceof fabric.Circle){
+        // if ( item.hasOwnProperty('object_type') && (item as any).object_type.includes('station') && item instanceof fabric.Circle){
+        if ( item.hasOwnProperty('object_type') && (item as any).object_type.includes('station') && (item as any).name !== undefined){
 
           var connect_to_map = false;
-          // check if the station is connected to the map(some station may not be connected to the map)
-          if (item.radius === 12){ // 12 is the radius of the station on the map
+          // check if the station is connected to the map(some station may not be connected to another map)
+          if ((item as any).radius === 12){ // 12 is the radius of the station on the map
             connect_to_map = true;
           }
 
-          station_list.push({
-            station_name : item.name,
-            pos : [item.left, item.top],
-            connect_to_map : connect_to_map
-          })
+          // 获取站点类型，如果没有则默认为'station_add'
+          var station_type = (item as any).station_type || 'station_add';
+
+          if (item.type === 'group'){
+            console.log('******* station grp *******');
+
+            var matrix = item.calcTransformMatrix();
+            // Get the target and pre position of the station
+            // Find circle1 (pre-pose) and circle2 (target-pose) from the group
+            var circle1: any = null;
+            var circle2: any = null;
+            var cir1_radius = 10; // size of circle1
+            var cir2_radius = 10; // size of circle2
+            var cir2_offset_y = 30; // offset of circle2
+
+            if (item instanceof fabric.Group) {
+              item.getObjects().forEach((obj: any) => {
+                if (obj.name === 'pre-pose' && obj instanceof fabric.Circle) {
+                  circle1 = obj;
+                  cir1_radius = obj.radius || 10;
+                } else if (obj.name === 'target-pose' && obj instanceof fabric.Circle) {
+                  circle2 = obj;
+                  cir2_radius = obj.radius || 10;
+                }
+              });
+            }
+
+            // Calculate local coordinates of circle centers relative to group origin
+            // In Fabric.js groups, objects have local coordinates relative to the group
+            var pre_pos_local: fabric.Point;
+            var target_pos_local: fabric.Point;
+
+            if (circle1 && circle2) {
+              // Circle center in local coordinates: left + radius, top + radius
+              pre_pos_local = {
+                x: (circle1.left || 0) + cir1_radius,
+                y: (circle1.top || 0) + cir1_radius
+              } as fabric.Point;
+
+              target_pos_local = {
+                x: (circle2.left || 0) + cir2_radius,
+                y: (circle2.top || 0) + cir2_radius
+              } as fabric.Point;
+            } else {
+              // Fallback: calculate based on known structure if circles not found
+              // circle1 is at (0, 0) relative to group, circle2 is at (0, cir2_offset_y)
+              pre_pos_local = {
+                x: cir1_radius,
+                y: cir1_radius
+              } as fabric.Point;
+
+              target_pos_local = {
+                x: cir2_radius,
+                y: cir2_offset_y + cir2_radius
+              } as fabric.Point;
+            }
+
+            // Transform local coordinates to map coordinates using the group's transformation matrix
+            var pre_cords = fabric.util.transformPoint(pre_pos_local, matrix);
+            var target_cords = fabric.util.transformPoint(target_pos_local, matrix);
+
+            console.log('pre_pos_local: ', pre_pos_local);
+            console.log('target_pos_local: ', target_pos_local);
+            console.log('pre_cords (map): ', pre_cords);
+            console.log('target_cords (map): ', target_cords);
+
+            station_list.push({
+              station_name: item.name,
+              target_pos: [target_cords.x, target_cords.y],
+              pre_pos: [pre_cords.x, pre_cords.y],
+              connect_to_map : connect_to_map,
+              station_type : station_type // 保存站点类型
+            })
+            
+          }
+          else{
+            console.log('******* station obj *******');
+            console.log({
+              'station_name': item.name, 
+              'left': item.left,
+              'top': item.top,
+              'station_type': station_type,
+              'connect_to_map': connect_to_map
+            });
+            // console.log('item to JSON', item.toJSON());
+            // get the circle radius
+            let cir_radius = 0;
+            // Use type assertion to 'any' to avoid type errors about properties not existing on 'item'
+            if ((item as any).radius !== undefined) {
+              // Single circle, station_add, station_charging, or station_lift
+              cir_radius = (item as any).radius;
+            } else if ((item as any)._objects && (item as any)._objects.length > 0) {
+              // If it's a group (e.g., station_unload group), try to find the first circle and get its radius
+              for (const obj of (item as any)._objects) {
+                if (obj.type === 'circle' && obj.radius !== undefined) {
+                  cir_radius = obj.radius;
+                  break;
+                }
+              }
+            }
+            station_list.push({
+              station_name : item.name,
+              pos : [(item.left || 0)+cir_radius, (item.top || 0)+cir_radius],
+              connect_to_map : connect_to_map,
+              station_type : station_type // 保存站点类型
+            })
+          }
         }
       })
       var data = {
@@ -790,6 +1023,9 @@ export class CanvasPage implements OnInit {
     map_fix_black: false,
     map_fix_white: false,
     station_add: false,
+    station_unload: false,
+    station_charging: false,
+    station_lift: false,
     zone_red: false,
     zone_cross_road: false,
     zone_slow: false,
