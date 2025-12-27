@@ -32,7 +32,7 @@ export class DatabaseService {
       //
       this.get_saved_map_list().subscribe((result:any)=>{
         this.dataService.all_save_map_list = result
-        console.log(' this.dataService.save_map_list : ', this.dataService.all_save_map_list );
+        console.log('database service all_save_map_list : ', this.dataService.all_save_map_list );
       })
      }
 
@@ -183,6 +183,75 @@ export class DatabaseService {
   }
   
   
+  /**
+   * Get download URL from Firebase Storage path
+   * @param storagePath Path in Firebase Storage (e.g., 'assets/maps/map_name/map_name.png')
+   * @returns Promise with download URL string
+   */
+  getDownloadURL(storagePath: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const ref = this.afStorage.ref(storagePath);
+      ref.getDownloadURL().subscribe({
+        next: (url) => resolve(url),
+        error: (err) => reject(err)
+      });
+    });
+  }
+
+  /**
+   * Get map list from Firebase Storage (map_list.json)
+   * @returns Observable of string array with map names
+   */
+  getMapListFromStorage(): Observable<string[]> {
+    return new Observable((observer) => {
+      const ref = this.afStorage.ref('assets/maps/map_list.json');
+      ref.getDownloadURL().subscribe({
+        next: (url) => {
+          // Fetch the JSON file from the download URL
+          fetch(url)
+            .then(response => response.json())
+            .then(data => {
+              observer.next(data);
+              observer.complete();
+            })
+            .catch(err => {
+              console.error('Error fetching map_list.json:', err);
+              // Return empty array if file doesn't exist
+              observer.next([]);
+              observer.complete();
+            });
+        },
+        error: (err) => {
+          console.error('Error getting map_list.json URL:', err);
+          // Return empty array if file doesn't exist
+          observer.next([]);
+          observer.complete();
+        }
+      });
+    });
+  }
+
+  /**
+   * Update map_list.json in Firebase Storage
+   * @param mapList Array of map names
+   * @returns Promise that resolves when update is complete
+   */
+  updateMapListInStorage(mapList: string[]): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const jsonContent = JSON.stringify(mapList);
+      const blob = new Blob([jsonContent], { type: 'application/json' });
+      const ref = this.afStorage.ref('assets/maps/map_list.json');
+      
+      ref.put(blob).then(() => {
+        console.log('map_list.json updated in Firebase Storage');
+        resolve();
+      }).catch((err) => {
+        console.error('Error updating map_list.json:', err);
+        reject(err);
+      });
+    });
+  }
+
   map_virtual_obstacles_data_list:any[] = [] //storing map virtual obstacles data
   /* 
   Update map_data on DB - which will eventually be dowloaded to each BOT and used for navigation

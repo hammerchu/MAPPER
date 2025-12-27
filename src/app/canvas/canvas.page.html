@@ -9,11 +9,13 @@
   <ion-toolbar>
 
    <ion-item ___SETUP___  *ngIf="dataService.headerMode ==='setup'">
-      <ion-button [disabled]="!this.dataService.current_map" fill="outline" color='dark' size="large" (click)="save()">Save</ion-button>
+      <ion-button [disabled]="!this.dataService.current_map" fill="outline" color='dark' size="large" (click)="save_map()">Save</ion-button>
       <ion-button  fill="outline" color='dark' size="large"  (click)="new_map_list.open()">New</ion-button>
+      <!-- <ion-button  fill="outline" color='dark' size="large"  (click)="new_map_action.open()">New</ion-button> -->
       <ion-button  fill="outline" color='dark' size="large"  (click)="load_map_list.open()">Load</ion-button>
+
       <ion-item>
-        <ion-select class="map_list" #new_map_list aria-label="Choose Map" value=""
+        <ion-select class="map_list" #new_map_list aria-label="Choose Map" value=""  
         [(ngModel)]="dataService.current_map" (ionChange)="new_map();" >
           <ion-select-option *ngFor="let map of dataService.map_list; let i = index" >{{map}}</ion-select-option>
         </ion-select>
@@ -66,8 +68,15 @@
       <!-- <ion-button [disabled]="!this.dataService.current_map"  slot="end" fill="outline" color='dark' size="large" ><ion-icon name="lock-open-outline"></ion-icon></ion-button> -->
    </ion-item>
 
+   <!-- <ion-item ___TRAFFIC_LIGHT___ *ngIf="dataService.headerMode ==='light'">
+    <ion-button disabled=true fill="outline">Add Traffic Light (WIP)</ion-button>
+   </ion-item> -->
+
    <ion-item ___STATION___ *ngIf="dataService.headerMode ==='station'">
-     <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["station_add"]? "success":"dark"'  size="large" (click)="toggleActiveMode('station_add')">Add Station</ion-button>
+     <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["station_add"]? "success":"dark"'  size="large" (click)="toggleActiveMode('station_add')">Station</ion-button>
+     <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["station_unload"]? "success":"dark"'  size="large" (click)="toggleActiveMode('station_unload')">Un/load</ion-button>
+     <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["station_charging"]? "success":"dark"'  size="large" (click)="toggleActiveMode('station_charging')">Charging</ion-button>
+     <ion-button [disabled]="!this.dataService.current_map" fill="outline" [color]='activeMode["station_lift"]? "success":"dark"'  size="large" (click)="toggleActiveMode('station_lift')">Lift</ion-button>
      <!-- <ion-button [disabled]="!this.dataService.is_saved"  slot="end" fill="outline" color='dark' size="large" (click)="save_station()"> Save Station</ion-button> -->
      <ion-button [disabled]="!this.dataService.current_map || this.isExporting" slot="end" fill="outline" color='dark' size="large" (click)="save_station()"> Save Station</ion-button>
      <!-- <ion-button  slot="end" fill="outline" color='dark' size="large" (click)="databaseService.downloadFirebase()"> Download JSON</ion-button> -->
@@ -75,6 +84,13 @@
      <div style="margin: 50px;"></div>
    </ion-item>
 
+  <ion-item ___UPLOAD___ *ngIf="dataService.headerMode ==='upload'">
+     <ion-button fill="outline" color="dark" size="large" (click)="uploadZipFile()">Upload ZIP</ion-button>
+     <div id="zip_file_input" style="display: none;">
+       <input type="file" accept=".zip" (change)="onZipFileSelected($event)" />
+     </div>
+     <div style="margin: 50px;"></div>
+  </ion-item> 
   </ion-toolbar>
 </ion-header>
 
@@ -95,13 +111,15 @@
         </ion-item>
         <ion-item>
           <ion-select class="map_list" #new_map_list aria-label="Choose Map" value="" aria-placeholder="Choose Map"
-            [(ngModel)]="station_name" (ionChange)="close_floating_UI(true)">
+          [(ngModel)]="station_name" (ionChange)="close_floating_UI(true)">
           <ion-select-option *ngFor="let map of dataService.map_header_list; let i = index" >{{map}}</ion-select-option>
         </ion-select>
-        </ion-item>
-      </div>
-
-
+      </ion-item>
+    </div>
+    
+    
+    <!-- <canvas id="canvas_minimap" width="220" height="160"
+      style="position:fixed; left:20px; bottom:20px; border:1px solid #999; background:rgba(255,255,255,0.9); z-index:10000; pointer-events:auto;"></canvas> -->
     <!-- <div style="position:absolute; right:100px;bottom: 100px;  border-radius: 50px; width: 300px; height:400px; background-color: rgba(255, 255, 255, 0.7); z-index: 99;"></div> -->
     <canvas id="canvas_1" width="1200" height="600"></canvas>
     <canvas id="canvas_2" width="1200" height="600"></canvas>

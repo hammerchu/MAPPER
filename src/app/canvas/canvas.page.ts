@@ -1,9 +1,10 @@
-import { Component, OnInit, HostListener, ViewChild } from '@angular/core';
+import { Component, OnInit, HostListener, ViewChild, AfterViewInit } from '@angular/core';
 import { fabric } from 'fabric';
 import html2canvas from 'html2canvas';
 import * as download from 'downloadjs';
 import * as htmlToImage from 'html-to-image';
 import { toPng, toJpeg, toBlob, toPixelData, toSvg } from 'html-to-image';
+import { firstValueFrom } from 'rxjs'; // for Promise conversion
 
 import {DataService} from '../service/data.service'
 import {DatabaseService} from '../service/database.service'
@@ -14,6 +15,11 @@ import { initializeApp } from "firebase/app";
 import { IonInput } from '@ionic/angular';
 // import * as map_marker from '../../assets/maps/map_marker.json'
 
+
+/* 
+require jszip, ionic, angular, html2canvas, fabricjs, downloadjs, html-to-image
+
+*/
 
 
 interface pos_marker {
@@ -30,7 +36,7 @@ interface pos_marker {
 })
 
 
-export class CanvasPage implements OnInit {
+export class CanvasPage implements OnInit, AfterViewInit {
 
   canvas?:fabric.Canvas
   canvas_control?:fabric.Canvas
@@ -97,10 +103,17 @@ export class CanvasPage implements OnInit {
     this.canvas = new fabric.Canvas('canvas_1', options);
     this.canvas_control = new fabric.Canvas('canvas_2', options);
 
-    /* PAN */
+    /* PAN now with plain mouse; select with Shift + mouse */
     this.canvas.on('mouse:down', (opt)=> {
       var evt = opt.e;
       if (evt.shiftKey === true) {
+        // selection mode with Shift key
+        this.isDragging = false;
+        if (this.canvas){
+          this.canvas.selection = true;
+        }
+      } else {
+        // pan by default with mouse drag (no Shift)
         if (this.canvas){
           this.canvas.selection = false;
           this.isDragging = true;
@@ -124,6 +137,7 @@ export class CanvasPage implements OnInit {
           vpt[5] += e.clientY - this.lastPosY;
         }
         this.canvas.requestRenderAll();
+        this.updateMiniMapView();
         this.lastPosX = e.clientX;
         this.lastPosY = e.clientY;
       }
@@ -135,11 +149,12 @@ export class CanvasPage implements OnInit {
         this.canvas?.setViewportTransform(this.canvas.viewportTransform);
         var mCanvas:any = this.canvas?.viewportTransform; // obtain the canvas transformation matrix after pan
         this.mInverse = fabric.util.invertTransform(mCanvas); // and then update the reverse
-        this.canvas.selection = true;
+        this.canvas.selection = opt.e.shiftKey === true; // keep selection enabled only when Shift is held
       }
       this.isDragging = false;
-      this.selection = true;
+      this.selection = opt.e.shiftKey === true;
       this.current_pan = this.canvas?.viewportTransform;
+      this.updateMiniMapView();
 
     });
 
@@ -161,6 +176,7 @@ export class CanvasPage implements OnInit {
           var mCanvas:any = this.canvas?.viewportTransform; // obtain the canvas transformation matrix after zoom
           this.mInverse = fabric.util.invertTransform(mCanvas); // and then update the reverse
           this.canvas.requestRenderAll();
+          this.updateMiniMapView();
         }
       }
     });
@@ -416,10 +432,59 @@ export class CanvasPage implements OnInit {
         }
 
         // Hardcoded strokeWidth as 2
-        var station_text = new fabric.IText('', { fill:"rgb(0, 0, 0, 0.7)", strokeWidth: 2, top:new_mouse_pos.y + 10, left: new_mouse_pos.x + 10, fontFamily: 'Arial', fontSize: 25})
+        var station_text = new fabric.IText('', { fill:"rgb(0, 0, 0, 0.7)", strokeWidth: 2, top:new_mouse_pos.y + 10, left: new_mouse_pos.x + 30, fontFamily: 'Arial', fontSize: 20})
         this.launch_floating_UI(evt.clientX, evt.clientY, station, station_text)
       }
     });
+  }
+
+  ngAfterViewInit() {
+    this.initMiniMapCanvas();
+    this.ensureMiniMapFrame();
+  }
+
+  /**
+   * Ensure minimap canvas is initialized after view is ready
+   */
+  initMiniMapCanvas(){
+    if (!this.canvas_minimap){
+      const miniEl = document.getElementById('canvas_minimap');
+      if (!miniEl){
+        console.warn('canvas_minimap element not found');
+        return;
+      }
+      this.canvas_minimap = new fabric.Canvas(miniEl as HTMLCanvasElement, {
+        selection: false,
+        hoverCursor: 'default',
+        backgroundColor: 'transparent',
+        renderOnAddRemove: false
+      });
+      console.log('minimap initialized');
+    }
+  }
+
+  /**
+   * Draw a minimal frame so user can see minimap even before map load
+   */
+  ensureMiniMapFrame(){
+    this.initMiniMapCanvas();
+    if (!this.canvas_minimap){ return; }
+    if (this.canvas_minimap.getObjects().length === 0){
+      const frame = new fabric.Rect({
+        left: 0,
+        top: 0,
+        width: this.canvas_minimap.getWidth(),
+        height: this.canvas_minimap.getHeight(),
+        fill: 'rgba(255,255,255,0.9)',
+        stroke: '#999',
+        strokeWidth: 1,
+        selectable: false,
+        evented: false
+      });
+      this.canvas_minimap.add(frame);
+      this.canvas_minimap.sendToBack(frame);
+      this.canvas_minimap.renderAll();
+    }
   }
   screen_x:number = 0
   screen_y:number = 0
@@ -536,7 +601,7 @@ export class CanvasPage implements OnInit {
       this.dataService.headerMode= this.dataService.headerModeList[2]
     }
     if ((event.metaKey || event.ctrlKey) && event.key === 's') {
-      this.save();
+      this.save_map();
       event.preventDefault();
     }
     if ((event.ctrlKey) && event.key === '2') {
@@ -594,6 +659,173 @@ export class CanvasPage implements OnInit {
   }
 
 
+  /** Upload a zip file */
+  selectedZipFile:any;
+  isUploading = false;
+  uploadMessage:any;
+  uploadSuccess = false;
+  uploadZipFile(){
+    console.log('uploading zip file');
+    setTimeout(() => {
+      const zipFileInput = document.querySelector('#zip_file_input input[type="file"]') as HTMLInputElement;
+      if (zipFileInput) {
+        zipFileInput.value = ''; // reset so change always triggers
+        zipFileInput.click();
+      } else {
+        console.warn('ZIP file input not found.');
+      }
+    }, 0);
+  }
+
+  onZipFileSelected(event:any){
+    console.log('zip file selected');
+  // unzip the zip file and upload it to Firebase Storage (not local /assets/maps folder)
+  // Note: Browser security prevents writing directly to local file system
+  // Files are uploaded to Firebase Storage at path: assets/maps/...
+
+  const file = event.target.files && event.target.files[0];
+  if (!file) {
+    this.toastService.simpleAlertToast('No zip file selected', 2000);
+    return;
+  }
+
+  this.isUploading = true;
+  this.uploadMessage = "Uploading...";
+
+  // Dynamically import JSZip (assume JSZip is included in package)
+  import('jszip').then((JSZipModule: any) => {
+    // Ensure compatibility with both default and named exports
+    const JSZip = JSZipModule.default ? JSZipModule.default : JSZipModule;
+    const zip = new JSZip();
+
+    zip.loadAsync(file).then(async (zipData: any) => {
+      // Upload each file to Firebase Storage
+      const filePromises: Promise<any>[] = [];
+      const uploadedFiles: string[] = [];
+      const mapFolders = new Set<string>(); // Track unique map folder names
+
+      // For keeping track of folders and files in the zip
+      zipData.forEach((relativePath: string, zipEntry: any) => {
+        // Extract only files (ignore directories)
+        if (!zipEntry.dir) {
+          // Normalize the path: remove leading slashes and handle different ZIP structures
+          let normalizedPath = relativePath.replace(/^\/+/, '').replace(/\\/g, '/');
+          
+          // If ZIP contains files at root, assume they should go into a folder structure
+          // If ZIP already has folder structure (e.g., "map_name/map_name.png"), preserve it
+          // If ZIP has "assets/maps/" prefix, remove it to avoid duplication
+          if (normalizedPath.startsWith('assets/maps/')) {
+            normalizedPath = normalizedPath.substring('assets/maps/'.length);
+          }
+          
+          // Extract map folder name from path (e.g., "map_name/map_name.png" -> "map_name")
+          const pathParts = normalizedPath.split('/');
+          if (pathParts.length > 1) {
+            const folderName = pathParts[0];
+            mapFolders.add(folderName);
+          }
+          
+          // Prepare for uploading the file to Firebase Storage/assets/maps/
+          const filePath = `assets/maps/${normalizedPath}`;
+          
+          filePromises.push(
+            zipEntry.async('blob').then((blob: Blob) => {
+              const ref = this.databaseService.afStorage.ref(filePath);
+              return ref.put(blob)
+                .then(() => {
+                  uploadedFiles.push(filePath);
+                  return {file: filePath, success: true};
+                })
+                .catch(e => {
+                  console.error(`Failed to upload ${filePath}:`, e);
+                  return {file: filePath, success: false, error: e};
+                });
+            })
+          );
+        }
+      });
+
+      if (filePromises.length === 0) {
+        this.isUploading = false;
+        this.uploadSuccess = false;
+        this.uploadMessage = "No files found in ZIP.";
+        this.toastService.simpleAlertToast('ZIP file is empty or contains only directories', 3000);
+        return;
+      }
+
+      Promise.all(filePromises)
+        .then(async (results) => {
+          const successCount = results.filter(r => r.success).length;
+          const failCount = results.length - successCount;
+          this.uploadSuccess = results.every(res => res.success);
+          
+          // Update map_list.json if upload was successful and we found map folders
+          if (this.uploadSuccess && mapFolders.size > 0) {
+            try {
+              // Get current map list from Firebase Storage
+              const currentMapList = await firstValueFrom(this.databaseService.getMapListFromStorage()) || [];
+              
+              // Merge new map folders with existing list (avoid duplicates)
+              const updatedMapList = [...new Set([...currentMapList, ...Array.from(mapFolders)])].sort();
+              
+              // Update map_list.json in Firebase Storage
+              await this.databaseService.updateMapListInStorage(updatedMapList);
+              
+              // Refresh map list in DataService
+              this.dataService.getSubfolderNames().subscribe((result) => {
+                this.dataService.map_header_list = result;
+                this.dataService.map_list = result;
+                console.log('Map list refreshed:', result);
+              });
+              
+              this.uploadMessage = `Upload successful! ${successCount} file(s) uploaded. ${mapFolders.size} map(s) added.`;
+              this.toastService.simpleToast(`ZIP extracted and uploaded successfully! ${successCount} file(s) uploaded. ${mapFolders.size} map(s) added.`, 3000);
+              console.log('Uploaded files:', uploadedFiles);
+              console.log('Map folders found:', Array.from(mapFolders));
+            } catch (error) {
+              console.error('Error updating map_list.json:', error);
+              // Still show success for file uploads even if map_list update failed
+              this.uploadMessage = `Upload successful! ${successCount} file(s) uploaded. (Map list update failed)`;
+              this.toastService.simpleToast(`ZIP extracted and uploaded successfully! ${successCount} file(s) uploaded.`, 3000);
+            }
+          } else if (this.uploadSuccess) {
+            this.uploadMessage = `Upload successful! ${successCount} file(s) uploaded to Firebase Storage.`;
+            this.toastService.simpleToast(`ZIP extracted and uploaded successfully! ${successCount} file(s) uploaded to Firebase Storage.`, 3000);
+            console.log('Uploaded files:', uploadedFiles);
+          } else {
+            this.uploadMessage = `${successCount} succeeded, ${failCount} failed.`;
+            const failed = results.filter(res => !res.success).map(res => res.file).join(', ');
+            this.toastService.simpleAlertToast(`Some files failed: ${failed}`, 4000);
+            console.error('Failed files:', results.filter(r => !r.success));
+          }
+          
+          this.isUploading = false;
+        })
+        .catch(e => {
+          this.isUploading = false;
+          this.uploadSuccess = false;
+          this.uploadMessage = "Upload failed.";
+          this.toastService.simpleAlertToast('Failed to extract/upload files', 2500);
+          console.error('Upload error:', e);
+        });
+
+    }).catch((err:any) => {
+      this.isUploading = false;
+      this.uploadSuccess = false;
+      this.uploadMessage = "Zip extraction failed.";
+      this.toastService.simpleAlertToast('Failed to read zip file', 2500);
+      console.error('ZIP read error:', err);
+    });
+  }).catch((err:any) => {
+    this.isUploading = false;
+    this.uploadSuccess = false;
+    this.uploadMessage = "JSZip not available.";
+    this.toastService.simpleAlertToast('JSZip library missing', 2500);
+    console.error('JSZip import error:', err);
+  });
+
+  }
+
 
   /**
    * IO
@@ -609,41 +841,79 @@ export class CanvasPage implements OnInit {
   use_prox = false;
   originalImage?: fabric.Image;
   scaledImage?: fabric.Image;
+  // minimap
+  canvas_minimap?: fabric.Canvas;
+  minimap_rect?: fabric.Rect;
+  minimap_scale = 0.1;
+  minimap_w = 220;
+  minimap_h = 160;
+
+  /**
+   * Get Firebase Storage download URL for a map image
+   * @param mapName Name of the map
+   * @param extension File extension (default: '.png')
+   * @returns Promise with download URL string
+   */
+  async getMapImageURL(mapName: string, extension: string = '.png'): Promise<string> {
+    const storagePath = `${this.dataService.map_preflix}${mapName}/${mapName}${extension}`;
+    return await this.databaseService.getDownloadURL(storagePath);
+  }
+
   /* Create a new map project */
   new_map(){
       this.canvas?.clear()
       this.canvas_control?.clear()
 
-      var ext = '.png'
-      var full_map_path = `${this.dataService.map_preflix}${this.dataService.current_map}/${this.dataService.current_map}${ext}`
-      fabric.Image.fromURL(full_map_path, img => {
-        // console.log('w & h: ', img.width, img.height );
-        if (this.canvas && img.width && img.height){
-          // img.scaleToWidth(img.width/2);
-          // this.map_w = img.width/4
-          // this.map_h = img.height/4
-          this.scale_factor = this.target_width/img.width
-          this.map_w = img.width
-          this.map_h = img.height
-          this.canvas?.setWidth(this.target_width)
-          this.canvas?.setHeight(img.height*this.scale_factor)
-          // this.map_w = img.width/4
-          // this.map_h = img.height/4
-          // this.canvas?.setWidth(this.map_w)
-          // this.canvas?.setHeight(this.map_h)
+      console.log('current map: ', this.dataService.current_map);
 
-          this.start_zoom = this.canvas?.getZoom();
-          this.current_zoom = this.canvas.getZoom();
-          this.start_pan = this.canvas?.viewportTransform;
-          this.current_pan = this.canvas?.viewportTransform;
-          // img.set({ selectable: false });
-          this.canvas?.setBackgroundImage(img, this.canvas.renderAll.bind(this.canvas));
-    
-          // initize the mInverse for mouse position calculation of poly draw mouse event
-          var mCanvas:any = this.canvas?.viewportTransform;
-          this.mInverse = fabric.util.invertTransform(mCanvas);
-        }
-      });
+      /* Import a new map */
+      if (this.dataService.current_map === 'new_map'){
+        this.dataService.current_map = ''
+        console.log('importing new map');
+      }
+      /* Import an existing map */
+      else{
+        var ext = '.png'
+        // Get Firebase Storage URL instead of local path
+        this.getMapImageURL(this.dataService.current_map, ext).then((imageURL) => {
+          // Set crossOrigin to 'anonymous' to allow canvas export without CORS taint
+          fabric.Image.fromURL(imageURL, (img: fabric.Image) => {
+            // console.log('w & h: ', img.width, img.height );
+            if (this.canvas && img.width && img.height){
+              // img.scaleToWidth(img.width/2);
+              // this.map_w = img.width/4
+              // this.map_h = img.height/4
+              this.scale_factor = this.target_width/img.width
+              this.map_w = img.width
+              this.map_h = img.height
+              this.canvas?.setWidth(this.target_width)
+              this.canvas?.setHeight(img.height*this.scale_factor)
+              // this.map_w = img.width/4
+              // this.map_h = img.height/4
+              // this.canvas?.setWidth(this.map_w)
+              // this.canvas?.setHeight(this.map_h)
+
+              this.start_zoom = this.canvas?.getZoom();
+              this.current_zoom = this.canvas.getZoom();
+              this.start_pan = this.canvas?.viewportTransform;
+              this.current_pan = this.canvas?.viewportTransform;
+              // img.set({ selectable: false });
+              this.canvas?.setBackgroundImage(img, this.canvas.renderAll.bind(this.canvas));
+        
+              // initize the mInverse for mouse position calculation of poly draw mouse event
+              var mCanvas:any = this.canvas?.viewportTransform;
+              this.mInverse = fabric.util.invertTransform(mCanvas);
+
+              // init minimap with the full map URL
+              this.initMiniMap(imageURL);
+              this.updateMiniMapView();
+            }
+          }, { crossOrigin: 'anonymous' });
+        }).catch((error) => {
+          console.error('Error getting map image URL:', error);
+          this.toastService.simpleAlertToast(`Failed to get map URL: ${this.dataService.current_map}`, 3000);
+        });
+      }
 
   }
 
@@ -668,25 +938,183 @@ export class CanvasPage implements OnInit {
 
   }
 
+  /**
+   * Init minimap and sync view rectangle
+   * @param mapURL Firebase Storage download URL or local path for background image
+   */
+  initMiniMap(mapURL:string){
+    this.initMiniMapCanvas();
+    if (!this.canvas_minimap || !this.canvas){ return; }
+    this.minimap_scale = Math.min(this.minimap_w / this.map_w, this.minimap_h / this.map_h);
+    const miniW = this.map_w * this.minimap_scale;
+    const miniH = this.map_h * this.minimap_scale;
+    this.canvas_minimap.setWidth(miniW);
+    this.canvas_minimap.setHeight(miniH);
+
+    // Set crossOrigin to 'anonymous' to allow canvas export without CORS taint
+    fabric.Image.fromURL(mapURL, (img: fabric.Image) => {
+      img.set({ selectable: false });
+      img.scaleToWidth(miniW);
+      img.scaleToHeight(miniH);
+      this.canvas_minimap?.setBackgroundImage(img, this.canvas_minimap.renderAll.bind(this.canvas_minimap));
+    }, { crossOrigin: 'anonymous' });
+
+    if (!this.minimap_rect){
+      this.minimap_rect = new fabric.Rect({
+        left: 0,
+        top: 0,
+        width: 40,
+        height: 40,
+        fill: 'rgba(255,0,0,0.1)',
+        stroke: 'red',
+        strokeWidth: 2,
+        selectable: true,
+        hasControls: false,
+        lockScalingFlip: true,
+        lockScalingX: true,
+        lockScalingY: true,
+        objectCaching: false,
+        name: 'mini_view'
+      });
+      this.canvas_minimap.add(this.minimap_rect);
+      this.canvas_minimap.on('object:moving', () => { this.handleMiniMapDrag(); });
+    }
+    this.updateMiniMapView();
+  }
+
+  /**
+   * Update the minimap viewport rectangle based on main canvas transform
+   */
+  updateMiniMapView(){
+    if (!this.canvas || !this.canvas_minimap || !this.minimap_rect || !this.canvas.viewportTransform){ return; }
+    const vpt = this.canvas.viewportTransform;
+    const scaleX = vpt[0];
+    const scaleY = vpt[3];
+    const offsetX = vpt[4];
+    const offsetY = vpt[5];
+    const viewW = this.canvas.getWidth() / scaleX;
+    const viewH = this.canvas.getHeight() / scaleY;
+    const mapX = -offsetX / scaleX;
+    const mapY = -offsetY / scaleY;
+
+    const miniX = mapX * this.minimap_scale;
+    const miniY = mapY * this.minimap_scale;
+    const miniW = viewW * this.minimap_scale;
+    const miniH = viewH * this.minimap_scale;
+
+    this.minimap_rect.set({
+      left: miniX,
+      top: miniY,
+      width: miniW,
+      height: miniH
+    });
+    this.minimap_rect.setCoords();
+    this.canvas_minimap.requestRenderAll();
+  }
+
+  /**
+   * Handle dragging the minimap viewport rectangle to pan main canvas
+   */
+  handleMiniMapDrag(){
+    if (!this.canvas || !this.canvas_minimap || !this.minimap_rect || !this.canvas.viewportTransform){ return; }
+    const vpt = this.canvas.viewportTransform;
+    const scaleX = vpt[0];
+    const scaleY = vpt[3];
+
+    // Clamp rect inside minimap
+    const maxX = this.canvas_minimap.getWidth() - this.minimap_rect.width!;
+    const maxY = this.canvas_minimap.getHeight() - this.minimap_rect.height!;
+    this.minimap_rect.left = Math.max(0, Math.min(this.minimap_rect.left || 0, maxX));
+    this.minimap_rect.top = Math.max(0, Math.min(this.minimap_rect.top || 0, maxY));
+
+    const mapX = (this.minimap_rect.left || 0) / this.minimap_scale;
+    const mapY = (this.minimap_rect.top || 0) / this.minimap_scale;
+
+    vpt[4] = -mapX * scaleX;
+    vpt[5] = -mapY * scaleY;
+    this.canvas.setViewportTransform(vpt);
+    this.canvas.requestRenderAll();
+    this.canvas_minimap.requestRenderAll();
+  }
+
   /* Export snapshot of the current map */
   isExporting = false
   export(canvas_name:string, scale:number, file_name:string){
     setTimeout(() =>
     {
-        html2canvas(document.getElementById(canvas_name) as HTMLElement, {scale: scale, backgroundColor:null}).then(canvas => {
+      // Use fabric.js canvas directly instead of html2canvas to avoid CORS issues
+      const fabricCanvas = canvas_name === 'canvas_1' ? this.canvas : this.canvas_control;
+      if (fabricCanvas) {
+        // Export canvas directly using fabric.js toDataURL method
+        const dataURL = fabricCanvas.toDataURL({
+          format: 'png',
+          quality: 1,
+          multiplier: scale
+        });
+        const link = document.createElement('a');
+        link.href = dataURL;
+        link.download = `${file_name}.png`;
+        link.click();
+        this.isExporting = false;
+      } else {
+        // Fallback to html2canvas if fabric canvas not available
+        html2canvas(document.getElementById(canvas_name) as HTMLElement, {
+          scale: scale, 
+          backgroundColor: null,
+          useCORS: true, // Enable CORS for cross-origin images
+          allowTaint: false // Don't allow tainted canvas
+        }).then(canvas => {
           const link = document.createElement('a');
-          link.href = canvas.toDataURL('image/png', {format: 'png'});
+          link.href = canvas.toDataURL('image/png');
           link.download = `${file_name}.png`;
           link.click();
-          this.isExporting = false
+          this.isExporting = false;
+        }).catch((error) => {
+          console.error('Error exporting with html2canvas:', error);
+          this.toastService.simpleAlertToast('Failed to export: CORS issue with cross-origin images', 3000);
+          this.isExporting = false;
         });
+      }
     },
     3000);
   }
   export2DB(canvas_name:string, scale:number, file_name:string){
     setTimeout(() =>
     {
-        html2canvas(document.getElementById(canvas_name) as HTMLElement, {scale: scale, backgroundColor:null}).then(canvas => {
+      // Use fabric.js canvas directly instead of html2canvas to avoid CORS issues
+      const fabricCanvas = canvas_name === 'canvas_1' ? this.canvas : this.canvas_control;
+      if (fabricCanvas) {
+        // Export canvas directly using fabric.js toDataURL method
+        const dataURL = fabricCanvas.toDataURL({
+          format: 'png',
+          quality: 1,
+          multiplier: scale
+        });
+
+        // Create a reference to the file in Firebase Storage
+        var fileRef = this.databaseService.get_ref_for_storage(file_name)
+
+        // Upload the canvas data URL as a blob to Firebase Storage
+        fileRef
+          .putString(dataURL, 'data_url')
+          .then(() => {
+            console.log('Canvas uploaded successfully!');
+            this.toastService.simpleToast('Control map export successfully', 2000)
+            this.isExporting = false
+          })
+          .catch((error) => {
+            console.error('Error uploading canvas:', error);
+            this.toastService.simpleAlertToast('Failed to export control map', 2000)
+            this.isExporting = false
+          });
+      } else {
+        // Fallback to html2canvas if fabric canvas not available
+        html2canvas(document.getElementById(canvas_name) as HTMLElement, {
+          scale: scale, 
+          backgroundColor: null,
+          useCORS: true, // Enable CORS for cross-origin images
+          allowTaint: false // Don't allow tainted canvas
+        }).then(canvas => {
           const dataURL = canvas.toDataURL('image/png');
 
           // Create a reference to the file in Firebase Storage
@@ -705,15 +1133,19 @@ export class CanvasPage implements OnInit {
               this.toastService.simpleAlertToast('Failed to export control map', 2000)
               this.isExporting = false
             });
-
+        }).catch((error) => {
+          console.error('Error exporting with html2canvas:', error);
+          this.toastService.simpleAlertToast('Failed to export: CORS issue with cross-origin images', 3000);
+          this.isExporting = false;
         });
+      }
     },
     1000);
   }
 
 
   /* Save a new ver of the current map to DB */
-  save(){
+  save_map(){
     if (this.dataService.current_map){
       setTimeout(() =>
       {
@@ -741,6 +1173,16 @@ export class CanvasPage implements OnInit {
       this.canvas_control?.setWidth(this.map_w)
       this.canvas_control?.setHeight(this.map_h)
 
+      if (this.dataService.current_map){
+        var ext = '.png'
+        // Get Firebase Storage URL instead of local path
+        this.getMapImageURL(this.dataService.current_map, ext).then((imageURL) => {
+          this.initMiniMap(imageURL);
+          this.updateMiniMapView();
+        }).catch((error) => {
+          console.error('Error getting map image URL in load():', error);
+        });
+      }
 
     } catch (error) {
       console.error('Error downloading JSON file:', error);
@@ -754,31 +1196,68 @@ export class CanvasPage implements OnInit {
     Export the base map
     */
     if (this.dataService.current_map){
+      this.isExporting = true;
 
-      this.canvas_control?.loadFromJSON(JSON.stringify(this.canvas?.toJSON(["object_type", "name"])), function(){});
-      this.canvas_control?.setWidth(this.map_w) //TODO
-      this.canvas_control?.setHeight(this.map_h) //TODO
-      // this.canvas_control?.setWidth(this.map_w*4) //TODO
-      // this.canvas_control?.setHeight(this.map_h*4) //TODO
-      setTimeout(() =>
-      {
-        // hide the station and zone objects
-        this.canvas_control?.getObjects().forEach( item  =>{
-          console.log('check object_type', (item as any).object_type);
-          if(item.hasOwnProperty('object_type')){
-          if ( (item as any).object_type.includes('station')|| (item as any).object_type.includes('zone') ){
-            item.set('fill', 'transparent')
-            item.set('stroke', 'transparent')
-          }
-          else{
-            item.set('stroke', 'transparent')
-          }}
-        })
-        this.canvas_control?.renderAll()
-        // export the base map
-        this.export('canvas_2', 1, `${this.dataService.current_map}_base_map`)
-      
-      }, 500)
+      // Get the background image URL to set it on canvas_control with proper CORS
+      const ext = '.png';
+      this.getMapImageURL(this.dataService.current_map, ext).then((imageURL) => {
+        // Load background image with crossOrigin for canvas_control
+        fabric.Image.fromURL(imageURL, (bgImg: fabric.Image) => {
+          // Copy canvas content to canvas_control
+          this.canvas_control?.loadFromJSON(JSON.stringify(this.canvas?.toJSON(["object_type", "name"])), () => {
+            // Set background image with proper CORS handling
+            this.canvas_control?.setBackgroundImage(bgImg, () => {
+              this.canvas_control?.setWidth(this.map_w);
+              this.canvas_control?.setHeight(this.map_h);
+              
+              setTimeout(() => {
+                // hide the station and zone objects
+                this.canvas_control?.getObjects().forEach(item => {
+                  console.log('check object_type', (item as any).object_type);
+                  if(item.hasOwnProperty('object_type')){
+                    if ((item as any).object_type.includes('station') || (item as any).object_type.includes('zone')){
+                      item.set('fill', 'transparent');
+                      item.set('stroke', 'transparent');
+                    }
+                    else{
+                      item.set('stroke', 'transparent');
+                    }
+                  }
+                });
+                this.canvas_control?.renderAll();
+                
+                // Export the base map using fabric.js toDataURL directly
+                try {
+                  if (this.canvas_control) {
+                    const dataURL = this.canvas_control.toDataURL({
+                      format: 'png',
+                      quality: 1,
+                      multiplier: 1
+                    });
+                    const link = document.createElement('a');
+                    link.href = dataURL;
+                    link.download = `${this.dataService.current_map}_base_map.png`;
+                    link.click();
+                    this.isExporting = false;
+                  }
+                } catch (error: any) {
+                  console.error('Error exporting base map:', error);
+                  if (error.message && error.message.includes('tainted')) {
+                    this.toastService.simpleAlertToast('Export failed: Canvas is tainted. Please check Firebase Storage CORS settings.', 4000);
+                  } else {
+                    this.toastService.simpleAlertToast('Failed to export base map', 3000);
+                  }
+                  this.isExporting = false;
+                }
+              }, 500);
+            });
+          });
+        }, { crossOrigin: 'anonymous' });
+      }).catch((error) => {
+        console.error('Error getting map image URL for export:', error);
+        this.toastService.simpleAlertToast('Failed to load map image for export', 3000);
+        this.isExporting = false;
+      });
     }
   }
 
@@ -1402,41 +1881,7 @@ export class CanvasPage implements OnInit {
   test = [{'a': 1, 'b':101}, {'a': 2, 'b':102}, {'a': 3, 'b':103}]
 
 
-  timestamp_list:any[] = []
-  markers_list:any[] = []
-  is_show_markers = false
-  toggle_marker(){
-    if(this.is_show_markers){
-      this.is_show_markers = false
-      this.show_marker_map(false)
-    }
-    else{
-      this.is_show_markers = true
-      this.show_marker_map(true)
-    }
-  }
 
-  /* Load and show marker map - currently it require a pre-rendered marker map PNG*/
-  originalBackgroundImage:any
-  show_marker_map(show:boolean){
-    if (show){
-      this.originalBackgroundImage = this.canvas?.backgroundImage;
-      try{
-        var ext = '_marker.png'
-        var full_marker_map_path = `${this.dataService.map_preflix}${this.dataService.current_map}/${this.dataService.current_map}${ext}`
-          fabric.Image.fromURL(full_marker_map_path, img => {
-            img.set({ selectable: false });
-            this.canvas?.setBackgroundImage(img, this.canvas.renderAll.bind(this.canvas));
-          });
-      }
-      catch(err){
-        console.log('Faile to load marker map', err);
-      }
-    }
-    else{
-      this.canvas?.setBackgroundImage(this.originalBackgroundImage, this.canvas.renderAll.bind(this.canvas));
-    }
-  }
 
   example_test_convex_polygon(){
     // test convex polygon

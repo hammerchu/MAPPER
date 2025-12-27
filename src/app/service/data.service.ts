@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { DatabaseService } from './database.service';
 
 @Injectable({
   providedIn: 'root'
@@ -8,7 +9,7 @@ import { Observable } from 'rxjs';
 export class DataService {
 
   // header mode
-  headerModeList = ['setup', 'zone', 'station']
+  headerModeList = ['setup', 'zone', 'station', 'upload']
   headerMode = this.headerModeList[0]
 
   //storing saved map list from db
@@ -21,6 +22,7 @@ export class DataService {
   current_map = ''
   map_list:string[] = [];
   map_header_list:string[] = [];
+  // Firebase Storage path prefix (not local assets)
   map_preflix = 'assets/maps/'
 
   // map_fix (black and white)
@@ -38,9 +40,10 @@ export class DataService {
 
 
   constructor(
-    private http: HttpClient
+    private http: HttpClient,
+    private databaseService: DatabaseService
     ) {
-      // get all map names
+      // get all map names from Firebase Storage
       this.getSubfolderNames().subscribe((result)=>{
         this.map_header_list = result
         this.map_list = result
@@ -48,16 +51,20 @@ export class DataService {
       })
   }
 
+  /**
+   * Get map list from Firebase Storage instead of local file
+   * @returns Observable of string array with map names
+   */
   getSubfolderNames(): Observable<string[]> {
-    return this.http.get<string[]>('/assets/maps/map_list.json'); //Reading list of map from file
+    return this.databaseService.getMapListFromStorage();
   }
 
   /* Load data into the second map list */
   selectLoadMap(event:any){
     // console.log('selected map_name : ', event.detail.value );
     this.save_map_list = []
-    console.log(' this.all_save_map_list : ', this.all_save_map_list );
-    this.all_save_map_list.forEach((map)=>{
+    console.log('data service all_save_map_list : ', this.databaseService.dataService.all_save_map_list );
+    this.databaseService.dataService.all_save_map_list.forEach((map)=>{
       if(map.map_name === event.detail.value ){
         this.save_map_list.push(map)
       }
